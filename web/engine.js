@@ -1226,7 +1226,7 @@ function calc(S0, opts) {
   checksCalc(R, S);
   const bad = R.checks.filter(c => c.status === 'fail');
   R.ok = !R.errors.length && !bad.length && res.length > 0;
-  R.maxUtil = R.checks.filter(c => c.status !== 'info' && isFinite(c.ratio) && ETA_IDS.has(c.id)).reduce((a, c) => Math.max(a, c.ratio), 0);
+  R.maxUtil = R.checks.filter(c => c.status !== 'info' && isFinite(c.ratio) && ETA_IDS.has(c.id) && (c.id !== 'biaxF' || S.sec2.biax === 'fiber')).reduce((a, c) => Math.max(a, c.ratio), 0);
   return R;
 }
 
@@ -1456,7 +1456,7 @@ function checksCalc(R, S) {
     if (fibs.length) {
       const w = fibs.reduce((a, q) => (q.f.u > a.f.u ? q : a));
       const asCheck = S.sec2.biax === 'fiber';
-      add(gN, 'biaxF', 'Zginanie ukośne – kontur nośności M_y–M_z przy N_Ed (metoda włókien)', '6.1', Math.hypot(w.f.My, w.f.Mz) / 1e6, w.f.MRd / 1e6, 'kNm', { ratio: w.f.u, status: asCheck ? undefined : (w.f.u <= 1 ? 'ok' : 'info'), note: `${{ base: 'podstawa', mid: 'strefa środkowa', top: 'głowica' }[w.f.key]}; N_Ed = ${(w.f.N / 1e3).toFixed(1)} kN; ${asCheck ? 'kryterium decydujące (wybór w opcjach)' : 'sprawdzenie dokładne – informacyjnie (decyduje wzór 5.39)'}`, at: { ci: w.o.ci, sec: w.f.key }, sec: 'biax' });
+      add(gN, 'biaxF', 'Zginanie ukośne – kontur nośności M_y–M_z przy N_Ed (metoda włókien)', '6.1', Math.hypot(w.f.My, w.f.Mz) / 1e6, w.f.MRd / 1e6, 'kNm', { ratio: w.f.u, status: asCheck ? undefined : 'info', note: `${{ base: 'podstawa', mid: 'strefa środkowa', top: 'głowica' }[w.f.key]}; N_Ed = ${(w.f.N / 1e3).toFixed(1)} kN; ${asCheck ? 'kryterium decydujące (wybór w opcjach)' : 'sprawdzenie dokładne – informacyjnie (decyduje wzór 5.39)'}`, at: { ci: w.o.ci, sec: w.f.key }, sec: 'biax' });
     }
     // --- smukłość
     DIRS.forEach(d => {
@@ -1473,7 +1473,7 @@ function checksCalc(R, S) {
       }
     });
     const lmax = Math.max(R.buck.y.lam, R.buck.z.lam);
-    if (lmax > 140) add(gS, 'lam140', 'Smukłość bardzo duża (λ > 140) – zalecane powiększenie przekroju', '5.8.3', lmax, 140, '', { soft: true, sec: 'slenY' });
+    if (lmax > 140) add(gS, 'lam140', 'Smukłość bardzo duża (λ > 140) – zalecane powiększenie przekroju', '5.8.3', lmax, 140, '', { soft: true, sec: 'sleny' });
   }
   // --- ścinanie
   shearFinal(R);

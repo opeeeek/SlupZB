@@ -681,3 +681,52 @@ svg.elev .xend { cursor: ew-resize; } svg.elev .xend circle { stroke-width: 1.4;
 #ownrep:focus { outline-color: var(--acc); }
 #ownrep:empty::before { content: 'Pusty raport – pisz tutaj albo wstaw raport obliczeń przyciskiem powyżej.'; color: #8a93a3; font-style: italic; }
 .ownstate { font-size: 12px; color: var(--ink2); }
+
+/* ===================== SłupŻB – elementy dodatkowe */
+.ateta { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--ink2); margin-left: auto; }
+.ateta input { width: 52px; text-align: right; height: 26px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex: none; }
+.seg button { border: 0; background: var(--panel); color: var(--ink2); padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 550; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--acc); color: var(--onacc); }
+.rtools .seg button { padding: 6px 12px; font-size: 13px; }
+.schhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; margin-bottom: 6px; }
+.schhead h4 { margin: 0; }
+.cmbsel { width: 100%; margin-bottom: 6px; }
+.schpair { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+.schpair svg { width: 100%; height: auto; display: block; }
+.schemesvg .supp, .schemesvg .schcol { cursor: pointer; }
+.schemesvg .supp:hover, .schemesvg .schcol:hover { opacity: .7; }
+.minisec2 { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.minisec2 svg { cursor: pointer; flex: none; }
+.addbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+table.ldsum td.n { text-align: right; white-space: nowrap; }
+table.ldsum td.hs { font-size: 11.5px; color: var(--ink2); }
+table.ldsum tr.off td { opacity: .5; }
+table.ldsum small { color: var(--ink3); }
+table.ldsum.dt input.txt { height: 24px; width: 100%; min-width: 70px; }
+table.ldsum.dt input.txt.n { text-align: right; min-width: 56px; }
+table.ldsum.dt td { padding: 2px 3px; }
+.prog { height: 8px; background: var(--ubbg); border-radius: 4px; overflow: hidden; margin: 10px 0; }
+.prog i { display: block; height: 100%; background: var(--acc); transition: width .15s; }
+tr.selr td { background: var(--acc2) !important; }
+#modal .dlg.wide { max-width: 980px; }
+.dlg.secpop #report.expl { max-height: 62vh; overflow: auto; padding: 8px 12px; margin-top: 8px; border: 1px solid var(--line); }
+#ownrep { outline: none; min-height: 400px; }
+.rbprev { display: flex; justify-content: center; margin: 8px 0; }
+.rbprev svg { max-width: 100%; height: auto; }
+.secsvg { max-width: 100%; height: auto; }
+.secsvg.secedit .zhit { cursor: pointer; }
+.secsvg.secedit .barsh:hover { fill: var(--acc); fill-opacity: .08; }
+.secsvg.secedit .tieh:hover { stroke-opacity: .6; }
+.secsvg .zdim { cursor: pointer; }
+.elevsvg, .extsvg, .xychart, .hchart { max-width: 100%; height: auto; }
+:is(#report, #ownrep) .fig { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+:is(#report, #ownrep) .fig svg { max-width: 100%; height: auto; }
+.lpop .row .txt.n { text-align: right; }
+#modal .dlg.lpop { max-width: 560px; }
+.lpop .lsub { margin-top: 8px; }
+#modal .dlg.fpop.rebpop { max-width: 560px; }
+.xychart circle[data-ci]:hover { r: 5; }
+@media print { .xychart circle[data-ci] { cursor: default; } }
+.schemesvg polyline, .schemesvg polygon, .schemesvg text, .schemesvg circle { pointer-events: none; }

@@ -1,7 +1,7 @@
 """Generuje web/svgtheme.css: tokeny --sv-<hex> dla kolorów rysunków SVG (jasny / ciemny / druk)."""
 import colorsys, pathlib, re
 w = pathlib.Path(__file__).parent / 'web'
-src = (w / 'ui.js').read_text(encoding='utf-8') + (w / 'report.js').read_text(encoding='utf-8')
+src = ''.join((w / f).read_text(encoding='utf-8') for f in ('ui.js', 'report.js', 'draw.js'))
 cols = set()
 for h in re.findall(r'#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b', src):
     h = h.lower()

@@ -82,7 +82,7 @@ SZX.build = function (R, S) {
   D.text(ox, Y(zTop) + 8, 3.5, `${S.meta.name || 'Słup'} – widok, skala 1:${K}`, 'OPISY');
   // ================= PRZEKRÓJ A–A (1:Ks)
   const sx = xl + 90, sy = Y(L * 0.6), Xs = x => sx + x / Ks, Ys = y => sy - y / Ks;
-  D.text(sx, sy + 8, 3.5, `Przekrój A-A, skala 1:${Ks}`, 'OPISY');
+  D.text(sx, sy + 14, 3.5, `Przekrój A-A, skala 1:${Ks}`, 'OPISY');
   if (g.circ) {
     D.circle(Xs(g.D / 2), Ys(g.D / 2), g.D / 2 / Ks, 'PRZEKROJE');
     D.circle(Xs(g.D / 2), Ys(g.D / 2), (g.D / 2 - cov.cnom - lay.dt / 2) / Ks, 'STRZEMIONA');
@@ -96,7 +96,7 @@ SZX.build = function (R, S) {
   lay.bars.forEach(b => D.dot(Xs(b.x), Ys(b.y), Math.max(0.6, b.d / Ks), 'ZBR_PODLUZNE'));
   D.text(sx, Ys(g.h) - 8, 2.5, `${lay.n} %%c${lay.dmax}, strz. %%c${lay.dt}, cnom=${cov.cnom}`, 'OPISY');
   // ================= ZESTAWIENIE STALI
-  const cols = [['Poz.', 12], ['Nazwa', 70], ['%%c', 12], ['l [mm]', 20], ['n [szt.]', 18], ['L [m]', 20], ['m [kg]', 20]];
+  const cols = [['Poz.', 12], ['Nazwa', 88], ['%%c', 12], ['l [mm]', 20], ['n [szt.]', 18], ['L [m]', 20], ['m [kg]', 20]];
   const tw = cols.reduce((a, c) => a + c[1], 0), rh = 6, ty0 = Ys(g.h) - 25;
   const lines = [cols.map(c => c[0]), ...sc.rows.map(r => [r.pos, r.name, r.d, fmt(r.len, 0), r.n, fmt(r.tot, 2), fmt(r.kg, 1)]), ['', 'Razem', '', '', '', '', fmt(sc.tot, 1)]];
   D.text(sx, ty0 + 4, 3, 'Zestawienie stali', 'TABELA');

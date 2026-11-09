@@ -655,6 +655,7 @@ function renderElev(el) {
   h += `<div class="h2" style="margin-top:16px">Zestawienie stali</div><div class="tscroll">${scheduleHTML()}</div>`;
   el.innerHTML = h; renderDsum();
   $('#elDxf', el).onclick = () => exportDXF();
+  if (ART) { $('#elDxf', el).hidden = true; $('.h2', el).insertAdjacentHTML('beforeend', '<small>eksport DXF i raport .odt – w programie SlupZB.exe lub w pliku app.html</small>'); }
 }
 
 /* -------------------------------------------------------- Podsumowanie */
@@ -749,7 +750,7 @@ function renderReport(el) {
   $('#rpHtml', el).onclick = () => exportHTML();
   $('#rpOdt', el).onclick = () => exportODT();
   $('#rpPrint', el).onclick = () => doPrint();
-  if (ART) { $('#rpPrint', el).hidden = true; if (!Cap.dl) { $('#rpHtml', el).hidden = true; $('#rpOdt', el).hidden = true; } }
+  if (ART) { $('#rpPrint', el).hidden = true; $('#rpOdt', el).hidden = true; if (!Cap.dl) $('#rpHtml', el).hidden = true; }
   $$('#report .nref', el).forEach(b => b.addEventListener('click', () => normPopup(b.dataset.nref || b.textContent)));
 }
 function ownToolsHTML() { return `<div class="owntools rtools">${[['bold', '<b>B</b>'], ['italic', '<i>I</i>'], ['underline', '<u>U</u>'], ['h2', 'H2'], ['h3', 'H3'], ['p', '¶'], ['ul', '• lista'], ['undo', '↶'], ['redo', '↷']].map(([k, l]) => `<button class="btn sm" data-oc="${k}">${l}</button>`).join('')}<span style="flex:1"></span><button class="btn sm" id="ownIns">Wstaw raport pełny</button><button class="btn sm" id="ownRst">Przywróć raport obliczeń</button><button class="btn sm dng" id="ownClr">Wyczyść</button></div><p class="hint">Raport własny: kliknij w tekst i pisz; zmiany zapisują się w projekcie i nie zmieniają się przy kolejnych obliczeniach.</p>`; }

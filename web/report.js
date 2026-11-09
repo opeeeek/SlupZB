@@ -10,6 +10,7 @@ function helpers() {
   const { fmt, sym, esc } = U;
   const f = (v, d) => fmt(v, d === undefined ? 2 : d);
   let hn = 0, h3n = 0;
+  const rf = r => /^\(/.test(r) ? `[wzór ${r.slice(1, -1)}]` : `[${r}]`;
   const H2 = t => { h3n = 0; return `<h2>${++hn}. ${t}</h2>`; };
   const H3 = t => `<h3>${hn}.${++h3n}. ${t}</h3>`;
   const eq = (lhs, fx, sub, val, unit, ref, stt) => {
@@ -19,10 +20,10 @@ function helpers() {
     if (val !== undefined && val !== null && val !== '') s += ` = <b>${val}</b>`;
     if (unit) s += ` ${unit}`;
     if (stt) s += ` <span class="${stt[0]}">${stt[1]}</span>`;
-    if (ref) s += `<span class="r">[${ref}]</span>`;
+    if (ref) s += `<span class="r">${rf(ref)}</span>`;
     return s + '</div>';
   };
-  const line = (t, ref) => `<div class="eq">${t}${ref ? `<span class="r">[${ref}]</span>` : ''}</div>`;
+  const line = (t, ref) => `<div class="eq">${t}${ref ? `<span class="r">${rf(ref)}</span>` : ''}</div>`;
   const cmp = (a, rel, b, unit, d, okTxt) => {
     const good = rel === '≤' ? a <= b * (1 + 1e-9) + 1e-9 : rel === '<' ? a < b : a >= b * (1 - 1e-9) - 1e-9;
     return `<div class="eq">${f(a, d)} ${rel} ${f(b, d)} ${unit || ''} <span class="${good ? 'ok' : 'fail'}">${good ? '✔ ' + (okTxt || 'warunek spełniony') : '✖ warunek NIESPEŁNIONY'}</span></div>`;
@@ -153,7 +154,7 @@ SZR.build = function (R, S) {
     s += eq('n', 'N_{Ed}/(A_{c}·f_{cd})', `${f(r.NEd, 0)}/(${f(g.Ac, 0)}·${f(m.fcd, 2)})`, f(r.n, 3), '', '5.8.3.1');
     s += eq('ω', 'A_{s}·f_{yd}/(A_{c}·f_{cd})', `${f(lay.As, 0)}·${f(m.fyd, 1)}/(${f(g.Ac, 0)}·${f(m.fcd, 2)})`, f(r.omega, 3), '');
     s += eq('A', '1/(1 + 0,2·φ_{ef})', '', f(r.A, 3), '') + eq('B', '√(1 + 2ω)', '', f(r.Bc, 3), '');
-    s += r.Cmode === 'ends' ? eq('C', '1,7 − r_{m}', `r_{m} = M_{01}/M_{02} = ${f(r.rm, 3)}`, f(r.C, 3), '') : eq('C', '', { unbraced: 'układ nieusztywniony', transverse: 'obciążenie poprzeczne w słupie', imp: 'momenty I rzędu głównie od imperfekcji' }[r.Cmode], f(r.C, 2), '');
+    s += r.Cmode === 'ends' ? eq('r_{m}', 'M_{01}/M_{02} (momenty I rzędu bez imperfekcji)', `${f(r.M01 / 1e6, 2)}/${f(r.M02 / 1e6, 2)}`, f(r.rm, 3), '') + eq('C', '1,7 − r_{m}', `1,7 − ${f(r.rm, 3)}`, f(r.C, 3), '') : eq('C', '', { unbraced: 'układ nieusztywniony', transverse: 'obciążenie poprzeczne w słupie', imp: 'momenty I rzędu głównie od imperfekcji' }[r.Cmode], f(r.C, 2), '');
     s += eq('λ_{lim}', '20·A·B·C/√n', `20·${f(r.A, 3)}·${f(r.Bc, 3)}·${f(r.C, 3)}/√${f(r.n, 3)}`, f(r.lamLim, 1), '', '(5.13N)');
     s += line(`λ = ${f(r.lam, 1)} ${r.slender ? '&gt;' : '≤'} λ<sub>lim</sub> = ${f(r.lamLim, 1)} → ${r.slender ? '<b>efekty II rzędu należy uwzględnić</b>' : 'efekty II rzędu można pominąć (5.8.2(6))'}`, '5.8.3.1(1)');
     if (r.slender) {
@@ -259,7 +260,7 @@ SZR.build = function (R, S) {
       s += eq('V_{Rd,s}', 'A_{sw}/s·z·f_{ywd}·cot θ', `${f(q.Asw, 1)}/${q.s}·${f(q.z, 0)}·${f(m.fywd, 1)}·${f(q.cot, 2)}`, f(q.VRds / 1e3, 1), 'kN', '(6.8)');
       s += cmp(q.VEd / 1e3, '≤', q.VRds / 1e3, 'kN', 1);
     }
-    s += eq('α_{cw}', '(σ_{cp}/f_{cd})', '', f(q.acw, 3), '', '(6.11aN)') + eq('V_{Rd,max}', 'α_{cw}·b_{w}·z·ν_{1}·f_{cd}/(cot θ + tan θ)', `${f(q.acw, 3)}·${f(q.bw, 0)}·${f(q.z, 0)}·${f(m.nu1, 3)}·${f(m.fcd, 2)}/(${f(q.cot, 2)} + ${f(1 / q.cot, 2)})`, f(q.VRdmax / 1e3, 1), 'kN', '(6.9)');
+    s += eq('α_{cw}', `1 + σ_{cp}/f_{cd} (0 < σ_{cp} ≤ 0,25f_{cd}); 1,25 (≤ 0,5f_{cd}); 2,5(1 − σ_{cp}/f_{cd})`, `σ_{cp} = ${f(Math.max(0, q.Nmin) / g.Ac, 2)}…${f(Math.max(0, q.Nmax) / g.Ac, 2)} MPa`, f(q.acw, 3), '', '(6.11aN)') + eq('V_{Rd,max}', 'α_{cw}·b_{w}·z·ν_{1}·f_{cd}/(cot θ + tan θ)', `${f(q.acw, 3)}·${f(q.bw, 0)}·${f(q.z, 0)}·${f(m.nu1, 3)}·${f(m.fcd, 2)}/(${f(q.cot, 2)} + ${f(1 / q.cot, 2)})`, f(q.VRdmax / 1e3, 1), 'kN', '(6.9)');
     s += cmp(q.VEd / 1e3, '≤', q.VRdmax / 1e3, 'kN', 1);
     o += sec('shear' + d, s);
   });
@@ -333,7 +334,7 @@ SZR.build = function (R, S) {
     let s = H2('Zbrojenie słupa i zestawienie stali');
     s += `<div class="fig">${D.elevationSVG(R, S, { W: 560, H: 700 })}${D.sectionSVG(R, { W: 320, H: 320 })}</div>`;
     R.sched.rows.forEach(r => { s += line(`Poz. ${r.pos} – ${esc(r.name)}: ${r.n} × ⌀${r.d}, l = ${f(r.len, 0)} mm, razem ${f(r.tot, 2)} m, ${f(r.kg, 1)} kg`); });
-    R.sched.byD.forEach(q => { s += line(`${esc(q.steel === 'W' ? m.sw.id : m.st.id)} ⌀${q.d}: ${f(q.m, 2)} m × ${f(window.EC2.massPerM(q.d), 3)} kg/m = ${f(q.kg, 1)} kg`); });
+    R.sched.byD.forEach(q => { s += line(`${esc(q.steel === 'W' ? m.sw.short : m.st.short)} ⌀${q.d}: ${f(q.m, 2)} m × ${f(window.EC2.massPerM(q.d), 3)} kg/m = ${f(q.kg, 1)} kg`); });
     s += line(`<b>Masa stali razem: ${f(R.sched.tot, 1)} kg</b> (bez naddatków)`);
     o += sec('sched', s);
   }

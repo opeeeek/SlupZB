@@ -266,6 +266,7 @@ function materials(S) {
   const st = STEEL[S.mat.steel] || STEEL.B500SPn;
   const sw = STEEL[S.mat.steelW] || STEEL.B500A;
   const k = S.coef;
+  st.short = st.name.split(' – ')[0].replace(' (EPSTAL)', ''); sw.short = sw.name.split(' – ')[0].replace(' (EPSTAL)', '');
   const m = { c, st, sw, fck: c.fck, fcm: c.fck + 8, fctm: c.fctm, fctk05: c.fctk05, Ecm: c.Ecm * 1000, gc: k.gc, gs: k.gs, gcE: k.gcE, acc: k.acc, act: k.act };
   m.fcd = k.acc * c.fck / k.gc;
   m.fctd = k.act * c.fctk05 / k.gc;

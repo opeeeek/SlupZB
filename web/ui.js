@@ -628,11 +628,10 @@ function renderCharts(el) {
 /* ------------------------------------------------- zakładka Zbrojenie słupa */
 function scheduleHTML() {
   const sc = R.sched; if (!sc) return '';
-  const steelOf = r => r.steel === 'W' ? R.m.sw.id : R.m.st.id;
   let h = `<table class="sched"><thead><tr><th>Poz.</th><th>Nazwa</th><th>⌀ [mm]</th><th>Długość [mm]</th><th>Liczba [szt.]</th><th>Długość całk. [m]</th><th>Masa [kg]</th></tr></thead><tbody>`;
   sc.rows.forEach(r => { h += `<tr><td class="n">${r.pos}</td><td>${esc(r.name)}</td><td class="n">${r.d}</td><td class="n">${fmt(r.len, 0)}</td><td class="n">${r.n}</td><td class="n">${fmt(r.tot, 2)}</td><td class="n">${fmt(r.kg, 1)}</td></tr>`; });
   h += `</tbody></table><table class="sched" style="margin-top:8px"><thead><tr><th>Stal</th><th>⌀ [mm]</th><th>Długość [m]</th><th>Masa jedn. [kg/m]</th><th>Masa [kg]</th></tr></thead><tbody>`;
-  sc.byD.forEach(q => { h += `<tr><td>${esc(q.steel === 'W' ? R.m.sw.id : R.m.st.id)}</td><td class="n">${q.d}</td><td class="n">${fmt(q.m, 2)}</td><td class="n">${fmt(E.massPerM(q.d), 3)}</td><td class="n">${fmt(q.kg, 1)}</td></tr>`; });
+  sc.byD.forEach(q => { h += `<tr><td>${esc(q.steel === 'W' ? R.m.sw.short : R.m.st.short)}</td><td class="n">${q.d}</td><td class="n">${fmt(q.m, 2)}</td><td class="n">${fmt(E.massPerM(q.d), 3)}</td><td class="n">${fmt(q.kg, 1)}</td></tr>`; });
   h += `<tr class="tot"><td colspan="4">Razem (+ ok. 5% na zakłady i odpady – nie wliczono)</td><td class="n">${fmt(sc.tot, 1)}</td></tr></tbody></table>`;
   return h;
 }
@@ -643,7 +642,7 @@ function renderElev(el) {
   let h = `<div class="dsumx"></div><div class="h2">Zbrojenie słupa <small>widok, przekrój A–A, wyciągi prętów i zestawienie stali</small><button class="btn sm pri" id="elDxf" style="float:right">Eksport DXF</button></div>`;
   h += `<div class="flex"><div class="box">${Dw.elevationSVG(R, S, { W: 600, H: 760 })}</div><div style="display:flex;flex-direction:column;gap:14px;min-width:300px;flex:1"><div class="box"><h4>Przekrój A–A</h4>${Dw.sectionSVG(R, { W: 320, H: 320 })}</div>
     <div class="box"><h4>Strzemiona i zakłady</h4><table class="kv">
-      <tr><td>Strzemiona</td><td>⌀${R.lay.dt} (${esc(R.m.sw.id)})</td><td></td></tr>
+      <tr><td>Strzemiona</td><td>⌀${R.lay.dt} (${esc(R.m.sw.short)})</td><td></td></tr>
       <tr><td>Rozstaw w części środkowej s</td><td>${T.s}</td><td>mm</td></tr>
       <tr><td>Rozstaw przy stropach i w strefie zakładu</td><td>${T.sRed}</td><td>mm</td></tr>
       <tr><td>Strefa zagęszczenia u dołu (max(b, h)${T.lapZone ? '; zakład + 4⌀' : ''})</td><td>${fmt(T.zBot, 0)}</td><td>mm</td></tr>

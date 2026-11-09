@@ -1,4 +1,4 @@
-module belkazb
+module slupzb
 
 go 1.24.0
 

@@ -41,11 +41,20 @@ function partData(R, S, h, full) {
   let o = '';
   o += H2('Dane wejściowe');
   o += line(`Element: <b>${esc(S.meta.name || 'słup')}</b>${S.meta.note ? ' – ' + esc(S.meta.note) : ''}`);
-  o += line(`Przekrój: ${g.circ ? `okrągły, średnica D = ${g.D} mm` : `prostokątny b × h = ${g.b} × ${g.h} mm (b – wzdłuż osi y, h – wzdłuż osi z)`}; A<sub>c</sub> = ${f(g.Ac / 1e6, 4)} m²; wysokość słupa w świetle l = ${f(g.L / 1000, 2)} m`);
+  const G = S.geom;
+  const geoT = g.circ ? `okrągły, średnica D = ${g.D} mm` : g.ring ? `pierścieniowy, średnica zewnętrzna D = ${g.D} mm, grubość ścianki t = ${g.t} mm (otwór ⌀${g.Di} mm)`
+    : g.shape === 'T' ? `teowy: półka b<sub>f</sub> × h<sub>f</sub> = ${G.tee.bf} × ${G.tee.hf} mm, środnik b<sub>w</sub> = ${G.tee.bw} mm, wysokość całkowita h = ${G.tee.h} mm`
+    : g.shape === 'L' ? `kątowy (L): b × h = ${G.ang.b} × ${G.ang.h} mm, grubość ramienia pionowego t<sub>h</sub> = ${G.ang.th} mm, poziomego t<sub>b</sub> = ${G.ang.tb} mm`
+    : `prostokątny b × h = ${g.b} × ${g.h} mm (b – wzdłuż osi y, h – wzdłuż osi z)`;
+  o += line(`Przekrój: ${geoT}; A<sub>c</sub> = ${f(g.Ac / 1e6, 4)} m²; wysokość słupa w świetle l = ${f(g.L / 1000, 2)} m`);
+  if (g.isPoly || g.ring) o += line(`Charakterystyki przekroju (osie przez środek ciężkości, równoległe do krawędzi): ${g.isPoly ? `x<sub>c</sub> = ${f(g.xc, 1)} mm, y<sub>c</sub> = ${f(g.yc, 1)} mm (od lewej i górnej krawędzi); ` : ''}I<sub>y</sub> = ${f(g.Iy / 1e6, 0)}·10⁶ mm⁴, I<sub>z</sub> = ${f(g.Iz / 1e6, 0)}·10⁶ mm⁴${Math.abs(g.Iyz) > 1 ? `, I<sub>yz</sub> = ${f(g.Iyz / 1e6, 0)}·10⁶ mm⁴; osie główne: I<sub>max</sub> = ${f(g.I1 / 1e6, 0)}·10⁶, I<sub>min</sub> = ${f(g.I2 / 1e6, 0)}·10⁶ mm⁴, i<sub>min</sub> = ${f(g.iMin, 1)} mm` : ''}; obwód u = ${f(g.u, 0)} mm`);
   ['y', 'z'].forEach(d => { const B = R.buck[d]; o += line(`Płaszczyzna ${PLN(d)} (zginanie M<sub>${d}</sub>): ${esc(B.schName)}`); });
   o += line(`Beton ${esc(S.mat.concrete)}, stal podłużna ${esc(m.st.name)}, strzemiona ${esc(m.sw.name)}; kruszywo d<sub>g</sub> = ${S.mat.dg} mm`);
   o += line(`Klasa ekspozycji: ${cov.exps.join(', ')}; projektowy okres użytkowania ${S.env.life} lat`);
-  if (lay.n) o += line(`Zbrojenie podłużne: ${g.circ ? `${lay.n}⌀${lay.dmax} równomiernie na obwodzie` : `${lay.n} prętów: narożne 4⌀${S.reb.dc}${lay.n > 4 ? `, pośrednie ⌀${S.reb.dm} (wzdłuż b: ${S.reb.nb} szt., wzdłuż h: ${S.reb.nh} szt. – z narożnymi)` : ''}`}; A<sub>s</sub> = ${f(lay.As, 0)} mm², ρ = ${f(lay.As / g.Ac * 100, 2)}%`);
+  const rebT = g.circ ? `${lay.n}⌀${lay.dmax} równomiernie na obwodzie` : g.ring ? `${S.reb.nc}⌀${lay.dmax} na obwodzie zewnętrznym${S.reb.nci ? ` i ${S.reb.nci}⌀${lay.dmax} na obwodzie wewnętrznym` : ''}`
+    : g.isPoly ? `${lay.n} prętów: ⌀${S.reb.dc} w narożach i przecięciach obrysów strzemion (${lay.bars.filter(q => q.corner).length} szt.)${lay.n > lay.bars.filter(q => q.corner).length ? `, pośrednie ⌀${S.reb.dm} na ścianach co ≤ ${S.reb.sMax} mm` : ''}`
+    : `${lay.n} prętów: narożne 4⌀${S.reb.dc}${lay.n > 4 ? `, pośrednie ⌀${S.reb.dm} (wzdłuż b: ${S.reb.nb} szt., wzdłuż h: ${S.reb.nh} szt. – z narożnymi)` : ''}`;
+  if (lay.n) o += line(`Zbrojenie podłużne: ${rebT}; A<sub>s</sub> = ${f(lay.As, 0)} mm², ρ = ${f(lay.As / g.Ac * 100, 2)}%`);
   else o += line('<b>Zbrojenie podłużne nie zostało zadane</b> – sprawdzenia nośności dotyczą przekroju niezbrojonego.');
   if (lay.n) o += line(`Strzemiona ⌀${lay.dt}, rozstaw s = ${R.ties.s} mm, przy stropach i w strefie zakładu s = ${R.ties.sRed} mm${lay.pins.length ? `; szpilki: ${lay.pins.length} w przekroju` : ''}`);
   o += line(`Metoda analizy efektów II rzędu: ${{ nc: 'nominalnej krzywizny (5.8.8)', ns: 'nominalnej sztywności (5.8.7)', gen: 'ogólna – analiza nieliniowa (5.8.6)' }[S.sec2.method]}; zginanie ukośne: ${S.sec2.biax === 'fiber' ? 'kontur nośności (metoda włókien)' : 'wzór (5.39)'}`);
@@ -199,6 +208,7 @@ SZR.build = function (R, S) {
     // nośność
     let u = H2(`Nośność przekroju – zginanie z siłą podłużną w płaszczyźnie ${PLN(d)}`);
     u += line(`Metoda ogólna przekroju (zgodność odkształceń): płaskie przekroje, beton ${m.diag === 'rect' ? 'prostokątny wykres naprężeń' : 'parabola-prostokąt'} z ε<sub>cu</sub> = ${f(m.ecu * 1000, 2)}‰ (przy ściskaniu osiowym ε<sub>c</sub> ≤ ${f(m.ec * 1000, 2)}‰), stal f<sub>yd</sub> = ${f(m.fyd, 1)} MPa, ε<sub>ud</sub> = ${f(m.eud * 1000, 1)}‰; wytrzymałość betonu na rozciąganie pominięta.`, '6.1(2), 6.1(5)');
+    if (g.isPoly) u += line(`Przekrój ${g.shape === 'T' ? 'teowy' : 'kątowy'}: nośność w płaszczyźnie ${PLN(d)} wyznaczona metodą włókien przy zerowym momencie w drugiej płaszczyźnie (oś obojętna obrócona tak, by M<sub>${d === 'y' ? 'z' : 'y'}</sub> = 0) – dla przekroju niesymetrycznego oś równoległa do krawędzi dawałaby zawyżoną nośność.`, '6.1');
     const x = r.gov, MR = x.MRd;
     u += line(`Przekrój decydujący: <b>${SECN[x.key]}</b>, kombinacja ${esc(q.c.name)}`);
     u += eq('N_{Ed}', '', '', f(x.N / 1e3, 1), 'kN') + eq('M_{Ed}', '', '', f(x.M / 1e6, 2), 'kNm');
@@ -230,7 +240,7 @@ SZR.build = function (R, S) {
     if (!ob.biax.req) s += line('<span class="ok">✔ Warunki 5.38a i 5.38b spełnione we wszystkich kombinacjach – wystarczają sprawdzenia w każdej płaszczyźnie osobno.</span>', '5.8.9(3)');
     else {
       s += eq('N_{Rd}', 'A_{c}·f_{cd} + A_{s}·f_{yd}', '', f(cs.NRd / 1e3, 1), 'kN') + eq('N_{Ed}/N_{Rd}', '', '', f(cs.ratio, 3), '');
-      s += eq('a', g.circ ? '2,0 (przekrój kołowy)' : 'interpolacja: 0,1 → 1,0; 0,7 → 1,5; 1,0 → 2,0', '', f(cs.a, 3), '');
+      s += eq('a', g.round ? '2,0 (przekrój kołowy)' : 'interpolacja: 0,1 → 1,0; 0,7 → 1,5; 1,0 → 2,0', '', f(cs.a, 3), '');
       s += eq('M_{Rdy}', '', '', f(cs.MRdy / 1e6, 2), 'kNm') + eq('M_{Rdz}', '', '', f(cs.MRdz / 1e6, 2), 'kNm');
       s += eq('(M_{Edz}/M_{Rdz})^{a} + (M_{Edy}/M_{Rdy})^{a}', '', `(${f(cs.Mz / 1e6, 2)}/${f(cs.MRdz / 1e6, 2)})^{${f(cs.a, 2)}} + (${f(cs.My / 1e6, 2)}/${f(cs.MRdy / 1e6, 2)})^{${f(cs.a, 2)}}`, f(cs.v, 3), '', '(5.39)');
       s += cmp(cs.v, '≤', 1, '', 3);
@@ -250,7 +260,7 @@ SZR.build = function (R, S) {
     let s = H2(`Ścinanie w płaszczyźnie ${PLN(d)} (6.2)`);
     s += line(`Kombinacja ${esc(q.gov.c.name)}`);
     s += eq('V_{Ed}', S.sec2.V2 ? 'max|V_{0}| + π·M_{2}/l_{0}' : 'max|V_{0}|', `${f(q.V0 / 1e3, 2)} + ${f(q.V2 / 1e3, 2)}`, f(q.VEd / 1e3, 2), 'kN');
-    s += eq('b_{w}', '', '', f(q.bw, 0), 'mm') + eq('d', g.circ ? 'r + 2r_{s}/π' : '', '', f(q.d, 0), 'mm') + eq('z', '0,9·d', '', f(q.z, 0), 'mm');
+    s += eq('b_{w}', '', '', f(q.bw, 0), 'mm') + eq('d', g.round ? 'r + 2r_{s}/π' : '', '', f(q.d, 0), 'mm') + eq('z', '0,9·d', '', f(q.z, 0), 'mm');
     s += eq('k', '1 + √(200/d) ≤ 2,0', '', f(q.k, 3), '') + eq('ρ_{l}', 'A_{sl}/(b_{w}·d) ≤ 0,02', `${f(q.Asl, 0)}/(${f(q.bw, 0)}·${f(q.d, 0)})`, f(q.rhoL, 4), '');
     s += eq('σ_{cp}', 'N_{Ed,min}/A_{c} ≤ 0,2·f_{cd}', `${f(q.Nmin / 1e3, 1)}·10³/${f(g.Ac, 0)}`, f(q.scp, 2), 'MPa');
     s += eq('V_{Rd,c}', '[C_{Rd,c}·k·(100ρ_{l}f_{ck})^{1/3} + k_{1}σ_{cp}]·b_{w}·d ≥ (v_{min} + k_{1}σ_{cp})·b_{w}·d', `max(${f(q.VRdc1 / 1e3, 1)}; ${f(q.VRdc2 / 1e3, 1)})`, f(q.VRdc / 1e3, 1), 'kN', '(6.2)');
@@ -291,15 +301,15 @@ SZR.build = function (R, S) {
     s += eq('A_{s,min}', 'max(0,10·N_{Ed}/f_{yd}; 0,002·A_{c})', `max(0,10·${f(R.NEdMax, 0)}/${f(m.fyd, 1)}; 0,002·${f(g.Ac, 0)})`, f(R.AsMin, 0), 'mm²', '(9.12N)') + cmp(lay.As, '≥', R.AsMin, 'mm²', 0);
     s += eq('A_{s,max}', '0,04·A_{c}', '', f(0.04 * g.Ac, 0), 'mm²', '9.5.2(3)') + cmp(lay.As, '≤', 0.04 * g.Ac, 'mm²', 0) + line(`w strefie zakładu: ${S.det.lap === '100' ? '2' : '1,5'}·A<sub>s</sub> = ${f((S.det.lap === '100' ? 2 : 1.5) * lay.As, 0)} mm² ≤ 0,08·A<sub>c</sub> = ${f(0.08 * g.Ac, 0)} mm² ${(S.det.lap === '100' ? 2 : 1.5) * lay.As <= 0.08 * g.Ac ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}`);
     s += line(`Średnica prętów podłużnych ⌀ = ${lay.dmin}${lay.dmax !== lay.dmin ? '/' + lay.dmax : ''} mm ≥ ⌀<sub>min</sub> = ${S.coef.phiMin} mm ${lay.dmin >= S.coef.phiMin ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}`, '9.5.2(1)');
-    s += line(g.circ ? `Liczba prętów ${lay.n} ≥ 4 ${lay.n >= 4 ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}` : 'Pręt w każdym narożu przekroju <span class="ok">✔</span>', '9.5.2(4)');
-    const clr = g.circ ? lay.faces.c.clear : Math.min(lay.faces.b.clear, lay.faces.h.clear);
+    { const cN = R.checks.find(c => c.id === 'nbars'); s += line(g.round ? `Liczba prętów ${lay.n} ≥ 4 ${lay.n >= 4 ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}` : `Pręt w każdym narożu przekroju (naroży wypukłych: ${cN ? cN.Ed : 4}) ${cN && cN.status === 'ok' ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}`, '9.5.2(4)'); }
+    const clr = lay.minClear;
     s += eq('s_{min}', 'max(k_{1}·⌀; d_{g} + k_{2}; 20 mm)', `max(${lay.dmax}; ${S.mat.dg} + 5; 20)`, f(lay.smin, 0), 'mm', '8.2(2)') + cmp(clr, '≥', lay.smin, 'mm (najmniejszy odstęp w świetle)', 0);
     o += sec('det', s);
     let t = H2('Strzemiona (9.5.3)');
     t += eq('⌀_{t}', '≥ max(6 mm; ⌀_{max}/4)', `max(6; ${lay.dmax}/4)`, f(T.dtReq, 1), 'mm', '9.5.3(1)') + cmp(lay.dt, '≥', T.dtReq, 'mm (przyjęto ⌀' + lay.dt + ')', 1);
     t += eq('s_{cl,tmax}', 'min(20·⌀_{min}; b_{min}; 400 mm)', `min(20·${lay.dmin}; ${g.dmin}; 400)`, f(T.scl, 0), 'mm', '9.5.3(3)') + cmp(T.s, '≤', T.scl, 'mm (przyjęto s = ' + T.s + ' mm)', 0);
     t += eq('0,6·s_{cl,tmax}', '', '', f(T.sclRed, 0), 'mm', '9.5.3(4)') + cmp(T.sRed, '≤', T.sclRed, 'mm – strefy przy stropach (długość ' + f(T.zB0, 0) + ' mm) i zakładu', 0);
-    if (!g.circ) { const far = Math.max(lay.faces.b.far, lay.faces.h.far); t += line(`Największa odległość w świetle pręta od pręta utrzymanego strzemieniem lub szpilką: ${f(far, 0)} mm ≤ 150 mm ${far <= 150 ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}; szpilek w przekroju: ${lay.pins.length}`, '9.5.3(6)'); }
+    if (!g.round) { const far = g.isPoly ? lay.far : Math.max(lay.faces.b.far, lay.faces.h.far); t += line(`Największa odległość w świetle pręta od pręta utrzymanego strzemieniem lub szpilką: ${f(far, 0)} mm ≤ 150 mm ${far <= 150 ? '<span class="ok">✔</span>' : '<span class="fail">✖</span>'}; szpilek w przekroju: ${lay.pins.length}`, '9.5.3(6)'); }
     if (isFinite(T.sShear)) t += line(`Rozstaw wymagany ze ścinania s ≤ ${f(T.sShear, 0)} mm`, '6.2.3');
     t += line(`Rozmieszczenie: strefa dolna ${f(T.zBot, 0)} mm co ${T.sRed} mm${T.lapZone ? ` (obejmuje zakład l₀ + 4⌀ = ${f(T.lapZone, 0)} mm, ⌀ > 14 mm)` : ''}, część środkowa ${f(T.zMid, 0)} mm co ${T.s} mm, strefa górna ${f(T.zTop, 0)} mm co ${T.sRed} mm; razem ${T.sets} strzemion.`);
     o += sec('ties', t);
@@ -326,6 +336,7 @@ SZR.build = function (R, S) {
     else s += line(`Tablica 5.2a (interpolacja μ<sub>fi</sub>): ${F.aReq === null ? 'wymiar b mniejszy od minimalnego' : `a<sub>min</sub> = ${f(F.aReq, 1)} mm${F.need8 ? ', co najmniej 8 prętów' : ''}`} → ${F.tabOk ? '<span class="ok">✔ spełnione</span>' : '<span class="fail">✖ niespełnione</span>'}`, 'tab. 5.2a');
     s += eq('R_{ηfi}', '83·[1 − μ_{fi}·(1 + ω)/((0,85/α_{cc}) + ω)]', `ω = ${f(F.omega, 3)}`, f(F.Reta, 2), '') + eq('R_{a}', '1,60·(a − 30)', '', f(F.Ra, 2), '') + eq('R_{l}', '9,60·(5 − l_{0,fi})', '', f(F.Rl, 2), '') + eq('R_{b}', '0,09·b′', `b′ = ${f(F.bp, 0)} mm`, f(F.Rb, 2), '') + eq('R_{n}', '', `n = ${lay.n}`, f(F.Rn, 0), '');
     s += eq('R', '120·((R_{ηfi} + R_{a} + R_{l} + R_{b} + R_{n})/120)^{1,8}', '', f(F.Rcalc, 0), 'min', '(5.7)') + cmp(F.Rcalc, '≥', F.Rreq, 'min', 0) + (F.formValid ? '' : note('Wzór (5.7) poza zakresem stosowania (25 ≤ a ≤ 80 mm, 200 ≤ b′ ≤ 450 mm, l₀,fi ≤ 6 m, h ≤ 1,5b) – wynik informacyjny.'));
+    if (F.approx) s += note(F.approx);
     s += line(`<b>Wniosek: ${F.ok ? '<span class="ok">odporność ogniowa ' + F.R + ' zapewniona</span>' : '<span class="fail">odporność ogniowa ' + F.R + ' niezapewniona – zwiększ otulinę (a) lub wymiary przekroju</span>'}</b>`);
     o += sec('fire', s);
   }

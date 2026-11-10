@@ -45,7 +45,44 @@ D.sectionSVG = function (R, o) {
   const dt = lay.dt || 8, c = cov.cnom;
   let s = svgOpen(W, H, `class="secsvg${o.edit ? ' secedit' : ''}"`);
   const fail = o.fail || {};
-  if (g.circ) {
+  const tieCol = fail.ties ? C.red : C.tie, tw = Math.max(1.3, dt * k);
+  const barsSVG = () => lay.bars.map(b => `<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${Math.max(2, b.d / 2 * k)}" fill="${fail.bars ? C.red : C.bar}" ${!b.rest && !g.round && !o.small ? `stroke="${C.warn}" stroke-width="1.2"` : ''}/>`).join('');
+  if (g.ring) {
+    const cx = X(g.D / 2), cy = Y(g.D / 2), r = g.D / 2 * k, ri = g.Di / 2 * k;
+    s += `<path d="M${cx - r},${cy} a${r},${r} 0 1,0 ${2 * r},0 a${r},${r} 0 1,0 ${-2 * r},0 Z M${cx - ri},${cy} a${ri},${ri} 0 1,1 ${2 * ri},0 a${ri},${ri} 0 1,1 ${-2 * ri},0 Z" fill="${C.conc}" fill-rule="evenodd" stroke="${C.concL}" stroke-width="1.4" ${o.edit ? 'data-z="dims" class="zhit"' : ''}/>`;
+    if (lay.n) {
+      s += `<circle cx="${cx}" cy="${cy}" r="${lay.Rt * k}" fill="none" stroke="${tieCol}" stroke-width="${tw}" ${o.edit ? 'data-z="ties" class="zhit"' : ''}/>`;
+      if (lay.Rti) s += `<circle cx="${cx}" cy="${cy}" r="${lay.Rti * k}" fill="none" stroke="${tieCol}" stroke-width="${tw}" ${o.edit ? 'data-z="ties" class="zhit"' : ''}/>`;
+      s += barsSVG();
+      if (o.edit) s += `<circle cx="${cx}" cy="${cy}" r="${(lay.Rs + 8) * k}" fill="transparent" data-z="bars" class="zhit barsh" style="pointer-events:stroke" stroke="transparent" stroke-width="${Math.max(10, 30 * k)}"/>`;
+    } else if (o.edit) s += `<circle cx="${cx}" cy="${cy}" r="${(g.D / 2 - g.t / 2) * k}" fill="transparent" stroke="transparent" stroke-width="${g.t * k}" data-z="bars" class="zhit"/>` + tx(cx, cy + 4, 'brak zbrojenia – kliknij', { fs: 11, c: C.mut });
+    if (!o.small) {
+      s += dimH(ox, ox + bw, oy - 16, `D = ${g.D}`) + dimH(X(g.D / 2 + g.Di / 2), ox + bw, cy, `t = ${g.t}`, { fs: 9.5 });
+      if (lay.n) s += tx(cx, oy + bh + 26, `${lay.n}⌀${lay.dmax} · c_nom = ${c} mm`, { fs: 10.5, c: C.acc });
+    }
+  } else if (g.isPoly) {
+    s += `<path d="M${g.outline.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join(' L')} Z" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.4"/>`;
+    if (lay.n) {
+      const rr = ((lay.rin || 2 * dt) + dt / 2) * k;
+      g.ties.forEach((t, ti) => {
+        const x0 = X(t.x0 + c + dt / 2), y0 = Y(t.y0 + c + dt / 2), x1 = X(t.x1 - c - dt / 2), y1 = Y(t.y1 - c - dt / 2);
+        s += `<path d="M${x0 + rr},${y0} H${x1 - rr} A${rr},${rr} 0 0 1 ${x1},${y0 + rr} V${y1 - rr} A${rr},${rr} 0 0 1 ${x1 - rr},${y1} H${x0 + rr} A${rr},${rr} 0 0 1 ${x0},${y1 - rr} V${y0 + rr} A${rr},${rr} 0 0 1 ${x0 + rr},${y0} Z" fill="none" stroke="${tieCol}" stroke-width="${tw}" ${o.edit ? 'data-z="ties" class="zhit tieh"' : ''}/>`;
+        if (!o.small && ti === 0) { const P = [X(t.x0 + lay.offC), Y(t.y0 + lay.offC)], rad = (S.reb.dc / 2 + dt / 2) * k, L = Math.max(8, Math.max(10 * dt, 75) * k); [1, -1].forEach(sg => { const st = [P[0] + Math.SQRT1_2 * rad * sg, P[1] - Math.SQRT1_2 * rad * sg]; s += `<line x1="${st[0]}" y1="${st[1]}" x2="${st[0] + Math.SQRT1_2 * L}" y2="${st[1] + Math.SQRT1_2 * L}" stroke="${tieCol}" stroke-width="${tw}" stroke-linecap="round"/>`; }); }
+      });
+      lay.pins.forEach(p => { if (p.dir === 'v') s += `<line x1="${X(p.x)}" y1="${Y(p.y0)}" x2="${X(p.x)}" y2="${Y(p.y1)}" stroke="${tieCol}" stroke-width="${tw * 0.9}"/>`; else s += `<line x1="${X(p.x0)}" y1="${Y(p.y)}" x2="${X(p.x1)}" y2="${Y(p.y)}" stroke="${tieCol}" stroke-width="${tw * 0.9}"/>`; });
+      s += barsSVG();
+    }
+    if (o.edit) g.rects.forEach(r => { s += `<rect x="${X(r.x0) + 2}" y="${Y(r.y0) + 2}" width="${(r.x1 - r.x0) * k - 4}" height="${(r.y1 - r.y0) * k - 4}" fill="transparent" data-z="bars" class="zhit barsh"/>`; });
+    if (!lay.n && o.edit) s += tx(X(g.xc), Y(g.yc), 'brak zbrojenia – kliknij', { fs: 11, c: C.mut });
+    if (!o.small) {
+      const G = S.geom;
+      s += `<g ${o.edit ? 'data-z="dims" class="zdim"' : ''}>`;
+      if (g.shape === 'T') { const q = G.tee, xl = (q.bf - q.bw) / 2; s += dimH(ox, ox + bw, oy - 16, `b_f = ${q.bf}`) + dimV(ox - 18, oy, oy + bh, `h = ${q.h}`) + dimV(ox + bw + 16, oy, Y(q.hf), `h_f = ${q.hf}`, { fs: 9.5 }) + dimH(X(xl), X(xl + q.bw), oy + bh + 14, `b_w = ${q.bw}`, { below: true }); }
+      else { const q = G.ang; s += dimH(ox, ox + bw, oy + bh + 14, `b = ${q.b}`, { below: true }) + dimV(ox - 18, oy, oy + bh, `h = ${q.h}`) + dimH(ox, X(q.th), oy - 16, `t = ${q.th}`) + dimV(ox + bw + 16, Y(q.h - q.tb), oy + bh, `t = ${q.tb}`, { fs: 9.5 }); }
+      s += '</g>';
+      if (lay.n) s += tx(ox, oy + bh + 40, `c_nom = ${c} mm · ${lay.n}⌀${lay.dmax}${lay.dmin !== lay.dmax ? '/' + lay.dmin : ''} · strz. ⌀${dt}${lay.pins.length ? ' · szpilki ' + lay.pins.length : ''}`, { fs: 10.5, c: C.acc, a: 'start' });
+    }
+  } else if (g.circ) {
     const cx = X(g.D / 2), cy = Y(g.D / 2), r = g.D / 2 * k;
     s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.4" ${o.edit ? 'data-z="dims" class="zhit"' : ''}/>`;
     if (lay.n) {
@@ -243,9 +280,13 @@ D.xyChart = function (o) {
 D.interactionSVG = function (R, dir, o) {
   o = o || {};
   const U = R.dirs[dir].U;
-  const P = U.pos.curve(90).map(([M, N]) => [M / 1e6, N / 1e3]);
-  const Nn = U.neg.curve(90).map(([M, N]) => [-M / 1e6, N / 1e3]);
-  const loop = P.concat(Nn.reverse());
+  let loop;
+  if (U.rotTab) { const t = U.rotTab; loop = t.Ns.map((N, i) => [(t.P[i] || 0) / 1e6, N / 1e3]).concat(t.Ns.map((N, i) => [-(t.Q[i] || 0) / 1e6, N / 1e3]).reverse()); }
+  else {
+    const P = U.pos.curve(90).map(([M, N]) => [M / 1e6, N / 1e3]);
+    const Nn = U.neg.curve(90).map(([M, N]) => [-M / 1e6, N / 1e3]);
+    loop = P.concat(Nn.reverse());
+  }
   const pts = [];
   const res = R.res || [], govC = o.gov;
   res.forEach(q => { const r = q[dir]; r.secs.forEach(sc => { pts.push({ x: (sc.sg || 1) * sc.M / 1e6, y: sc.N / 1e3, c: q.ci === govC ? C.red : C.acc, r: q.ci === govC ? 4 : 2.4, gov: q.ci === govC, ci: q.ci, t: `${q.c.name} – ${sc.key === 'base' ? 'podstawa' : sc.key === 'top' ? 'głowica' : 'środek'}: N = ${fmt(sc.N / 1e3, 1)} kN, M = ${fmt(sc.M / 1e6, 1)} kNm, η = ${fmt(sc.u * 100, 0)}%` }); }); });
@@ -326,7 +367,7 @@ D.elevationSVG = function (R, S, o) {
   s += `<rect x="${cx - sw / 2}" y="${Y(L + hTop)}" width="${sw}" height="${Y(L) - Y(L + hTop)}" fill="${C.conc}" stroke="${C.concL}"/>` + tx(cx + sw / 2 - 4, Y(L + hTop) - 4, `strop / belka h = ${hTop}`, { fs: 9.5, a: 'end', c: C.mut });
   if (cont) s += `<rect x="${X(0)}" y="${Y(zTop)}" width="${wcol}" height="${Y(L + hTop) - Y(zTop)}" fill="none" stroke="${C.concL}" stroke-dasharray="5 3"/>` + tx(cx, Y(zTop) - 4, 'słup kondygnacji wyższej', { fs: 9.5, c: C.mut });
   // pręty: dwa skrajne w widoku (lewy/prawy)
-  const xb = [lay.offC || lay.a, depth - (lay.offC || lay.a)];
+  const ysB = lay.bars.map(q => q.y), xb = [Math.min(...ysB), Math.max(...ysB)];
   const main = sch.rows.find(r => r.kind === 'main'), start = sch.rows.find(r => r.kind === 'start');
   xb.forEach((xx, i) => {
     const x = X(xx);
@@ -378,8 +419,8 @@ D.extractsSVG = function (R, S, o) {
     const col = r.kind === 'tie' || r.kind === 'pin' ? C.tie : r.kind === 'start' ? C.acc : C.bar;
     if (r.shape === 'I') s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="${col}" stroke-width="2.4"/>` + tx((x0 + x1) / 2, y - 6, fmt(r.straight, 0), { fs: 10 });
     else if (r.shape === 'L') { const lg = Math.max(20, Math.min(60, r.leg / r.len * (x1 - x0) * 2)); s += `<polyline points="${x0},${y - lg} ${x0},${y} ${x1},${y}" fill="none" stroke="${col}" stroke-width="2.4"/>` + tx((x0 + x1) / 2, y - 6, fmt(r.straight, 0), { fs: 10 }) + tx(x0 - 6, y - lg / 2 + 3, fmt(r.leg, 0), { fs: 10, a: 'end' }); }
-    else if (r.shape === 'S') { const g = R.g, c = R.cov.cnom, bt = g.b - 2 * c - r.d, ht = g.h - 2 * c - r.d, sc = Math.min(44 / ht, 120 / bt), w = bt * sc, h = ht * sc, xx = x0 + 30; s += `<rect x="${xx}" y="${y - h / 2 - 4}" width="${w}" height="${h}" rx="3" fill="none" stroke="${col}" stroke-width="2"/><line x1="${xx + 3}" y1="${y - h / 2 - 1}" x2="${xx + 11}" y2="${y - h / 2 + 7}" stroke="${col}" stroke-width="2"/><line x1="${xx + 1}" y1="${y - h / 2 + 3}" x2="${xx + 9}" y2="${y - h / 2 + 11}" stroke="${col}" stroke-width="2"/>` + tx(xx + w / 2, y - h / 2 - 8, fmt(bt, 0), { fs: 9.5 }) + tx(xx + w + 6, y, fmt(ht, 0), { fs: 9.5, a: 'start' }) + tx(xx + w + 60, y + 3, `haki 135°: ${fmt(r.hook, 0)} mm`, { fs: 9.5, a: 'start', c: C.mut }); }
-    else if (r.shape === 'O') { s += `<circle cx="${x0 + 50}" cy="${y - 4}" r="22" fill="none" stroke="${col}" stroke-width="2"/>` + tx(x0 + 82, y, `⌀ wewn. ${fmt(R.g.D - 2 * R.cov.cnom - 2 * r.d, 0)}, haki ${fmt(r.hook, 0)}`, { fs: 9.5, a: 'start' }); }
+    else if (r.shape === 'S') { const bt = r.bt, ht = r.ht, sc = Math.min(44 / ht, 120 / bt), w = bt * sc, h = ht * sc, xx = x0 + 30; s += `<rect x="${xx}" y="${y - h / 2 - 4}" width="${w}" height="${h}" rx="3" fill="none" stroke="${col}" stroke-width="2"/><line x1="${xx + 3}" y1="${y - h / 2 - 1}" x2="${xx + 11}" y2="${y - h / 2 + 7}" stroke="${col}" stroke-width="2"/><line x1="${xx + 1}" y1="${y - h / 2 + 3}" x2="${xx + 9}" y2="${y - h / 2 + 11}" stroke="${col}" stroke-width="2"/>` + tx(xx + w / 2, y - h / 2 - 8, fmt(bt, 0), { fs: 9.5 }) + tx(xx + w + 6, y, fmt(ht, 0), { fs: 9.5, a: 'start' }) + tx(xx + w + 60, y + 3, `haki 135°: ${fmt(r.hook, 0)} mm`, { fs: 9.5, a: 'start', c: C.mut }); }
+    else if (r.shape === 'O') { s += `<circle cx="${x0 + 50}" cy="${y - 4}" r="22" fill="none" stroke="${col}" stroke-width="2"/>` + tx(x0 + 82, y, `⌀ osi ${fmt(r.Dt, 0)}, haki ${fmt(r.hook, 0)}`, { fs: 9.5, a: 'start' }); }
     else if (r.shape === 'P') { s += `<polyline points="${x0 + 10},${y - 12} ${x0},${y} ${x0 + 160},${y} ${x0 + 150},${y - 12}" fill="none" stroke="${col}" stroke-width="2"/>` + tx(x0 + 80, y - 6, fmt(r.len - 2 * r.hook, 0), { fs: 9.5 }); }
     s += tx(W - 10, y + 3, `l = ${fmt(r.len, 0)} mm`, { fs: 10.5, a: 'end', w: 650 });
   });

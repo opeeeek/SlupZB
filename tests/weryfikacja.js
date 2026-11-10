@@ -32,7 +32,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 2. Długości wyboczeniowe (rys. 5.7, wzory 5.15/5.16) */
 {
-  const S = E.defaultState(); S.geom.L = 5;
+  const S = E.exampleState(); S.geom.L = 5;
   const g = E.geomCalc(E.normalize(S), { errors: [] });
   const B = sch => { const T = E.normalize(Object.assign({}, S, { buck: { same: false, y: { sch, mode: 'auto' }, z: { sch: 'pp', mode: 'auto' } } })); return E.bucklingDir(T, g, 'y').l0; };
   near('l₀ wspornik = 2l', B('cant'), 10000); near('l₀ utwierdzenie–przegub = 0,7l', B('fp'), 3500); near('l₀ utwierdzenie–utwierdzenie = 0,5l', B('ff'), 2500);
@@ -45,7 +45,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 3. Nośność przekroju – ściskanie osiowe i zginanie czyste (przekrój 400×400, 8⌀20, C30/37, B500) */
 {
-  const S = E.defaultState(); S.geom.b = 400; S.geom.h = 400; S.reb = { nb: 3, nh: 3, dc: 20, dm: 20, set: true };
+  const S = E.exampleState(); S.geom.b = 400; S.geom.h = 400; S.reb = { nb: 3, nh: 3, dc: 20, dm: 20, set: true };
   S.loads.items = [E.newItem('perm', { N: 100 })];
   const R = E.calc(S, { fast: true });
   const m = R.m, As = R.lay.As;
@@ -70,7 +70,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 4. Słup wzorcowy – metoda nominalnej krzywizny, obliczenie ręczne krok po kroku */
 {
-  const S = E.defaultState();          // 350×350, l = 4,2 m, przegub–przegub, C30/37, 8⌀20
+  const S = E.exampleState();          // 350×350, l = 4,2 m, przegub–przegub, C30/37, 8⌀20
   const R = E.calc(S);
   const o = R.res.find(q => q.c.name === '6.10a – Q1' && q.c.gl === 'sup');
   const r = o.y, m = R.m;
@@ -116,7 +116,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 5. Zginanie ukośne – wykładnik a (5.39) */
 {
-  const S = E.defaultState(); const R = E.calc(S);
+  const S = E.exampleState(); const R = E.calc(S);
   const cs = R.res[0].biax.secs[0].cases[0];
   const ratio = cs.ratio, aExp = ratio <= 0.1 ? 1 : ratio <= 0.7 ? 1 + (ratio - 0.1) / 0.6 * 0.5 : 1.5 + (ratio - 0.7) / 0.3 * 0.5;
   near('a (interpolacja wg N_Ed/N_Rd)', cs.a, aExp, 1e-9);
@@ -124,7 +124,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 6. Zakład prętów (8.7.3) i zakotwienie */
 {
-  const S = E.defaultState(); const R = E.calc(S); const A = R.anch, m = R.m;
+  const S = E.exampleState(); const R = E.calc(S); const A = R.anch, m = R.m;
   const fbd = 2.25 * 1 * 1 * Math.min(2.0, 2.0) / 1.4;         // C30/37: f_ctk,0.05 = 2,0 MPa
   near('f_bd = 2,25·η₁·η₂·f_ctd', A.fbd, fbd, 1e-9);
   near('l_b,rqd = ⌀/4·f_yd/f_bd', A.lbrqd, 20 / 4 * m.fyd / fbd, 1e-9);
@@ -133,7 +133,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 7. Odporność ogniowa – wzór (5.7) */
 {
-  const S = E.defaultState(); S.fire.R = 'R60'; S.fire.muSel = 'manual'; S.fire.mu = 0.5; S.fire.l0fiK = 0.7;
+  const S = E.exampleState(); S.fire.R = 'R60'; S.fire.muSel = 'manual'; S.fire.mu = 0.5; S.fire.l0fiK = 0.7;
   const R = E.calc(S); const F = R.fire, m = R.m;
   const w = R.lay.As * m.fyd / (350 * 350 * m.fcd), a = F.a;
   const Reta = 83 * (1 - 0.5 * (1 + w) / (0.85 + w)), Ra = 1.6 * (a - 30), Rl = 9.6 * (5 - 0.7 * 4.2), Rb = 0.09 * 350, Rn = 12;
@@ -143,7 +143,7 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 8. Wymagania konstrukcyjne 9.5 */
 {
-  const S = E.defaultState(); const R = E.calc(S);
+  const S = E.exampleState(); const R = E.calc(S);
   near('A_s,min = max(0,1·N_Ed/f_yd; 0,002·A_c)', R.AsMin, Math.max(0.1 * R.NEdMax / R.m.fyd, 0.002 * 350 * 350), 1e-9);
   near('s_cl,tmax = min(20⌀; b; 400)', R.ties.scl, Math.min(20 * 20, 350, 400), 1e-9);
   truth('⌀_t ≥ max(6; ⌀/4)', R.lay.dt >= Math.max(6, 20 / 4));
@@ -151,17 +151,65 @@ const truth = (name, v) => { if (v) nOk++; else nBad++; console.log(`${v ? '✔'
 
 /* 9. Kombinacje: 1 obciążenie stałe + użytkowe + wiatr ± (6.10a/b) */
 {
-  const S = E.defaultState(); const R = E.calc(S);
+  const S = E.exampleState(); const R = E.calc(S);
   truth(`liczba kombinacji SGN: ${R.combos.U.length} (> 0, w tym γ_G,inf i wiatr ±)`, R.combos.U.length >= 20 && R.combos.U.some(c => c.gl === 'inf') && R.combos.U.some(c => Array.from(c.f).some(v => v < 0)));
 }
 
 /* 10. Dobór zbrojenia i przekroju – wynik spełnia wszystkie warunki */
 {
-  const S = E.defaultState(); S.loads.items[0].N = 1500;
+  const S = E.exampleState(); S.loads.items[0].N = 1500;
   const A = E.autoReb(S);
   truth(`dobór zbrojenia: ${A.ok ? A.cand.n + '⌀' + A.cand.d : A.msg}`, A.ok && A.R.ok);
   const D = E.designDims(Object.assign(S, { geom: Object.assign(S.geom, { b: 250, h: 250 }) }));
   truth(`dobór przekroju: ${D.ok ? D.size.b + '×' + D.size.h + ' mm' : D.msg}`, D.ok && D.R.ok);
+}
+
+/* 11. Przekroje T, L i pierścieniowe – charakterystyki geometryczne i nośność */
+{
+  const mk = (shape, f) => { const S = E.exampleState(); S.geom.shape = shape; if (f) f(S); return S; };
+  // T: b_f = 700, h_f = 200, b_w = 300, h = 600
+  { const R = E.calc(mk('T'), { fast: true }), g = R.g;
+    const A1 = 700 * 200, A2 = 300 * 400, yc = (A1 * 100 + A2 * 400) / (A1 + A2);
+    near('T: A_c', g.Ac, A1 + A2, 1e-9); near('T: y_c (od góry)', g.yc, yc, 1e-9);
+    near('T: I_y', g.Iy, 700 * 200 ** 3 / 12 + A1 * (100 - yc) ** 2 + 300 * 400 ** 3 / 12 + A2 * (400 - yc) ** 2, 1e-9);
+    near('T: I_z', g.Iz, 200 * 700 ** 3 / 12 + 400 * 300 ** 3 / 12, 1e-9);
+    near('T: obwód u', g.u, 2 * 700 + 2 * 600, 1e-9);
+    truth(`T: pręt w każdym z 6 naroży wypukłych (${R.checks.find(c => c.id === 'nbars').note})`, R.checks.find(c => c.id === 'nbars').status === 'ok');
+    const m = R.m, As = R.lay.As;
+    near('T: N_Rd = (A_c − A_s)·f_cd + A_s·E_s·ε_c2', R.dirs.y.U.Nmax, (g.Ac - As) * m.fcd + As * Math.min(m.fyd, 200000 * m.ec2), 0.002);
+  }
+  // L: 600 × 600, ramiona 250 – równoramienny: I_y = I_z, I_yz ≠ 0, osie główne pod 45°
+  { const R = E.calc(mk('L'), { fast: true }), g = R.g;
+    const r1 = { A: 250 * 350, x: 125, y: 175 }, r2 = { A: 600 * 250, x: 300, y: 475 }, A = r1.A + r2.A;
+    const xc = (r1.A * r1.x + r2.A * r2.x) / A, yc = (r1.A * r1.y + r2.A * r2.y) / A;
+    near('L: A_c', g.Ac, A, 1e-9); near('L: x_c', g.xc, xc, 1e-9); near('L: y_c', g.yc, yc, 1e-9);
+    near('L: I_y = I_z (równoramienny)', g.Iy, g.Iz, 1e-9);
+    const Iyz = r1.A * (r1.x - xc) * (r1.y - yc) + r2.A * (r2.x - xc) * (r2.y - yc);
+    near('L: I_yz', g.Iyz, Iyz, 1e-9); near('L: I_min = I_y − |I_yz|', g.I2, g.Iy - Math.abs(Iyz), 1e-9);
+    truth(`L: 8 prętów (naroża, przecięcie ramion strzemion) przy s_max = 0`, E.calc(mk('L', S => { S.reb.sMax = 0; }), { fast: true }).lay.n === 8);
+  }
+  // pierścień ⌀600 × 150
+  { const R = E.calc(mk('ring'), { fast: true }), g = R.g, Di = 300;
+    near('pierścień: A_c = π(D² − D_i²)/4', g.Ac, Math.PI * (600 ** 2 - Di ** 2) / 4, 1e-9);
+    near('pierścień: I = π(D⁴ − D_i⁴)/64', g.Iy, Math.PI * (600 ** 4 - Di ** 4) / 64, 1e-9);
+    near('pierścień: A_c z pasków (całkowanie numeryczne)', g.parts.y.reduce((a, p) => a + p.b * (p.y1 - p.y0), 0), g.Ac, 1e-9);
+    const m = R.m, As = R.lay.As;
+    near('pierścień: N_Rd = (A_c − A_s)·f_cd + A_s·E_s·ε_c2', R.dirs.y.U.Nmax, (g.Ac - As) * m.fcd + As * Math.min(m.fyd, 200000 * m.ec2), 0.003);
+  }
+  // spójność: kontur M_y–M_z (włókna) w kierunku M_z = 0 ≈ M_Rd,y z krzywej interakcji (T i L)
+  ['T', 'L'].forEach(sh => {
+    const R = E.calc(mk(sh)), N = 1.0e6;
+    const u = R.bx.util(N, 100e6, 0), MRd = 100e6 / u.u, MRdy = R.dirs.y.U.MRd(N, 1);
+    near(`${sh}: kontur włókien przy M_z = 0 vs krzywa interakcji M_Rd,y(N = 1000 kN)`, MRd, MRdy, sh === 'L' ? 0.06 : 0.02);
+  });
+  // dobór zbrojenia spełnia wszystkie warunki
+  ['T', 'L', 'ring'].forEach(sh => { const A = E.autoReb(mk(sh, S => { S.loads.items[0].N = 2000; })); truth(`${sh}: dobór zbrojenia (${A.ok ? A.cand.n + '⌀' + A.cand.d : A.msg})`, A.ok && A.R.ok); });
+}
+
+/* 12. Nowy projekt – pusty start */
+{
+  const R = E.calc(E.defaultState());
+  truth('nowy projekt: bez obciążeń zmiennych i bez zbrojenia, obliczenia bez błędów', !R.errors.length && R.bare && E.defaultState().loads.items.length === 0);
 }
 
 console.log(`\nWynik: ${nOk} zgodnych, ${nBad} niezgodnych.`);

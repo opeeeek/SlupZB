@@ -60,8 +60,8 @@ SZX.build = function (R, S) {
   { const sw = depth + 1400; D.pline([[X(depth / 2 - sw / 2), Y(L)], [X(depth / 2 + sw / 2), Y(L)], [X(depth / 2 + sw / 2), Y(L + hTop)], [X(depth / 2 - sw / 2), Y(L + hTop)]], 'BETON', true); }
   if (cont) { D.line(X(0), Y(L + hTop), X(0), Y(zTop), 'OSIE'); D.line(X(depth), Y(L + hTop), X(depth), Y(zTop), 'OSIE'); }
   const main = sc.rows.find(r => r.kind === 'main'), start = sc.rows.find(r => r.kind === 'start');
-  const off = lay.offC || lay.a;
-  [off, depth - off].forEach((xx, i) => {
+  const ysB = lay.bars.map(q => q.y);
+  [Math.min(...ysB), Math.max(...ysB)].forEach((xx, i) => {
     const zEnd = cont ? zTop : L + hTop - cov.cnom - lay.dt - main.d;
     D.line(X(xx), Y(0), X(xx), Y(zEnd), 'ZBR_PODLUZNE');
     if (!cont) D.line(X(xx), Y(zEnd), X(xx + (i === 0 ? 1 : -1) * main.leg), Y(zEnd), 'ZBR_PODLUZNE');
@@ -83,9 +83,18 @@ SZX.build = function (R, S) {
   // ================= PRZEKRÓJ A–A (1:Ks)
   const sx = xl + 90, sy = Y(L * 0.6), Xs = x => sx + x / Ks, Ys = y => sy - y / Ks;
   D.text(sx, sy + 14, 3.5, `Przekrój A-A, skala 1:${Ks}`, 'OPISY');
-  if (g.circ) {
+  if (g.round) {
     D.circle(Xs(g.D / 2), Ys(g.D / 2), g.D / 2 / Ks, 'PRZEKROJE');
+    if (g.ring) D.circle(Xs(g.D / 2), Ys(g.D / 2), g.Di / 2 / Ks, 'PRZEKROJE');
     D.circle(Xs(g.D / 2), Ys(g.D / 2), (g.D / 2 - cov.cnom - lay.dt / 2) / Ks, 'STRZEMIONA');
+    if (lay.Rti) D.circle(Xs(g.D / 2), Ys(g.D / 2), lay.Rti / Ks, 'STRZEMIONA');
+    D.dimH(Xs(0), Xs(g.D), Ys(0) + 6, 'D=' + fmt(g.D, 0));
+  } else if (g.isPoly) {
+    D.pline(g.outline.map(([x, y]) => [Xs(x), Ys(y)]), 'PRZEKROJE', true);
+    const o = cov.cnom + lay.dt / 2, r = (lay.rin + lay.dt / 2) / Ks;
+    g.ties.forEach(t => D.rrect(Xs(t.x0 + o), Ys(t.y1 - o), Xs(t.x1 - o), Ys(t.y0 + o), r, 'STRZEMIONA'));
+    lay.pins.forEach(p => { if (p.dir === 'v') D.line(Xs(p.x), Ys(p.y0), Xs(p.x), Ys(p.y1), 'SZPILKI'); else D.line(Xs(p.x0), Ys(p.y), Xs(p.x1), Ys(p.y), 'SZPILKI'); });
+    D.dimH(Xs(0), Xs(g.b), Ys(0) + 6, fmt(g.b, 0)); D.dimV(Xs(0) - 6, Ys(g.h), Ys(0), fmt(g.h, 0));
   } else {
     D.pline([[Xs(0), Ys(0)], [Xs(g.b), Ys(0)], [Xs(g.b), Ys(g.h)], [Xs(0), Ys(g.h)]], 'PRZEKROJE', true);
     const o = cov.cnom + lay.dt / 2, r = (lay.rin + lay.dt / 2) / Ks;

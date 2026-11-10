@@ -1,4 +1,4 @@
-# SłupŻB 1.0 – obliczenia słupów żelbetowych wg PN-EN 1992-1-1
+# SłupŻB 1.1 – obliczenia słupów żelbetowych wg PN-EN 1992-1-1
 
 Program analogiczny do BelkaŻB (ten sam układ, wygląd i sposób pracy), przeznaczony do wymiarowania i sprawdzania słupów żelbetowych.
 
@@ -6,6 +6,17 @@ Trzy postacie tej samej aplikacji (wspólny kod z katalogu `web/`):
 - `SlupZB.exe` – program dla Windows 10/11 (jeden plik, bez instalacji, WebView2); projekty `*.slup`, autozapis w `%LOCALAPPDATA%\SlupZB`,
 - `app/app.html` – plik do otwarcia w dowolnej przeglądarce (offline),
 - `webapp/slupzb.html` – wersja do publikacji jako strona claude.ai (artefakt): „Moje projekty” na koncie, pobieranie projektu i raportu.
+
+## Poprawki 1.1
+
+- **Nowe przekroje: teowy (T), kątowy (L) i pierścieniowy (rura ⌀D × t)** – obok prostokątnego i okrągłego.
+  - T: półka b<sub>f</sub> × h<sub>f</sub>, środnik b<sub>w</sub>, wysokość h; L: b × h, grubości ramion t<sub>h</sub> i t<sub>b</sub>; pierścień: D, t, jedna lub dwie warstwy prętów (obwód zewnętrzny i wewnętrzny), obręcze zewnętrzna i wewnętrzna.
+  - Charakterystyki: pole, środek ciężkości, I<sub>y</sub>, I<sub>z</sub>, I<sub>yz</sub>, osie główne i i<sub>min</sub> (dla L – informacja o smukłości względem osi głównej najmniejszej bezwładności).
+  - Zbrojenie T i L: pręty w narożach strzemion i w przecięciach ich obrysów (także przy narożach wewnętrznych), pręty pośrednie na ścianach co ≤ s<sub>max</sub> (równo między prętami utrzymanymi), osobne strzemię zamknięte dla każdego prostokąta składowego, szpilki z warunku 150 mm (9.5.3(6)); sprawdzenie pręta w każdym narożu wypukłym.
+  - Nośność T i L w płaszczyźnie liczona metodą włókien z **osią obojętną obróconą tak, by moment w drugiej płaszczyźnie był zerowy** – dla przekroju niesymetrycznego oś równoległa do krawędzi zawyżałaby nośność (dla przykładowego L 600×600 o ok. 20%). Krzywe interakcji w zakładce Wykresy pokazują tę nośność.
+  - Ścinanie: b<sub>w</sub> – najmniejsza szerokość w kierunku ścinania (pierścień: 2t); pożar: tablica 5.2a i wzór (5.7) jako ocena przybliżona (b = najmniejsza grubość ramienia, b′ = 4A<sub>c</sub>/u) z notą w raporcie.
+  - Dobór zbrojenia (średnica × rozstaw prętów pośrednich; dla pierścienia jedna lub dwie warstwy) i przekroju (skalowanie wymiarów z zachowaniem proporcji), zestawienie stali ze strzemionami każdego obrysu, rysunki, DXF, raport.
+- **Nowy projekt jest pusty** – bez obciążeń i bez zbrojenia (jak w BelkaŻB). W pustym zestawieniu obciążeń przycisk „wczytaj przykład”. W zakładce Przekrój i zbrojenie dla przekroju bez prętów program pokazuje **zbrojenie wymagane** (najmniejsza masa stali spełniająca wszystkie sprawdzenia przy zadanym wytężeniu) z przyciskiem „Przyjmij to zbrojenie”.
 
 ## Zakładki
 
@@ -18,7 +29,7 @@ Trzy postacie tej samej aplikacji (wspólny kod z katalogu `web/`):
 
 ## Zakres obliczeń
 
-- **Przekroje**: prostokątne b × h (pręty narożne i pośrednie o różnych średnicach) i okrągłe ⌀D; nośność metodą zgodności odkształceń (parabola-prostokąt lub prostokąt, 3.1.7; stal 3.2.7; przy ściskaniu osiowym ε<sub>c</sub> ≤ ε<sub>c2</sub>).
+- **Przekroje**: prostokątne b × h (pręty narożne i pośrednie o różnych średnicach), okrągłe ⌀D, pierścieniowe ⌀D × t, teowe i kątowe; nośność metodą zgodności odkształceń (parabola-prostokąt lub prostokąt, 3.1.7; stal 3.2.7; przy ściskaniu osiowym ε<sub>c</sub> ≤ ε<sub>c2</sub>).
 - **Statyka**: schemat podparcia osobno w płaszczyznach h i b (przegub–przegub, wspornik, utwierdzenie–przegub, utwierdzenie–utwierdzenie, utwierdzenie przesuwne); siła N w głowicy z mimośrodem, momenty końcowe z analizy ramy, siły poziome w głowicy, obciążenie poziome na wysokości; ciężar własny (N rośnie ku podstawie).
 - **Kombinacje (PN-EN 1990)**: 6.10 lub 6.10a/6.10b, wszystkie warianty obciążeń zmiennych (obecne lub nie, kolejno wiodące), obciążenia dwukierunkowe (wiatr ±), γ<sub>G,sup</sub>/γ<sub>G,inf</sub>; charakterystyczne 6.14b i quasi-stałe 6.16b; albo siły obliczeniowe wprost.
 - **Smukłość i efekty II rzędu (5.8)**: długość wyboczeniowa wg rys. 5.7, z β lub z podatności węzłów (5.15)/(5.16); imperfekcje 5.2 (θ<sub>i</sub>, e<sub>i</sub> = θ<sub>i</sub>l<sub>0</sub>/2 lub l<sub>0</sub>/400); λ<sub>lim</sub> = 20ABC/√n z A (φ<sub>ef</sub>), B (ω), C (r<sub>m</sub>); pełzanie efektywne φ<sub>ef</sub> (5.19) dla każdej kombinacji, φ(∞,t<sub>0</sub>) wg zał. B; metody: **nominalnej krzywizny** (5.8.8: M<sub>0e</sub>, K<sub>r</sub>, K<sub>φ</sub>, e<sub>2</sub>), **nominalnej sztywności** (5.8.7: EI z (5.21)–(5.22) lub (5.26), N<sub>B</sub>, β), **ogólna** (5.8.6: zależność M–κ z wykresu 3.1.5 z f<sub>cd</sub>, E<sub>cd</sub>, pełzanie przez (1 + φ<sub>ef</sub>), słup modelowy, iteracja ugięć); mimośród minimalny e<sub>0</sub> (6.1(4)); przekroje podstawy, strefy środkowej i głowicy z właściwym N.
@@ -33,7 +44,7 @@ Parametry krajowe (ZK PL): γ<sub>c</sub> = 1,4, γ<sub>s</sub> = 1,15, γ<sub>c
 
 ## Weryfikacja
 
-`node tests/weryfikacja.js` – 49 porównań z obliczeniami niezależnymi: momenty w schematach podparcia (qL²/8, 9qL²/128, qL²/12, qL²/24, qL²/3, HL/2…), długości wyboczeniowe (rys. 5.7, wzory 5.15/5.16), nośność przekroju (N<sub>Rd</sub>, M<sub>Rd</sub> przy N = 0 – rachunek ręczny), pełny tok metody nominalnej krzywizny i nominalnej sztywności dla słupa wzorcowego (N<sub>Ed</sub>, e<sub>i</sub>, M<sub>0e</sub>, φ(∞,t<sub>0</sub>), φ<sub>ef</sub>, λ<sub>lim</sub>, e<sub>2</sub>, M<sub>Ed</sub>, EI, N<sub>B</sub>), wykładnik a (5.39), zakłady, wzór (5.7) i tablica 5.2a, wymagania 9.5, kombinacje, dobór zbrojenia i przekroju.
+`node tests/weryfikacja.js` – 73 porównania z obliczeniami niezależnymi: momenty w schematach podparcia (qL²/8, 9qL²/128, qL²/12, qL²/24, qL²/3, HL/2…), długości wyboczeniowe (rys. 5.7, wzory 5.15/5.16), nośność przekroju (N<sub>Rd</sub>, M<sub>Rd</sub> przy N = 0 – rachunek ręczny), pełny tok metody nominalnej krzywizny i nominalnej sztywności dla słupa wzorcowego (N<sub>Ed</sub>, e<sub>i</sub>, M<sub>0e</sub>, φ(∞,t<sub>0</sub>), φ<sub>ef</sub>, λ<sub>lim</sub>, e<sub>2</sub>, M<sub>Ed</sub>, EI, N<sub>B</sub>), wykładnik a (5.39), zakłady, wzór (5.7) i tablica 5.2a, wymagania 9.5, kombinacje, dobór zbrojenia i przekroju; przekroje T, L i pierścieniowe (pole, środek ciężkości, I<sub>y</sub>, I<sub>z</sub>, I<sub>yz</sub>, I<sub>min</sub>, N<sub>Rd</sub>, zgodność metody włókien z krzywą interakcji, pręty w narożach, dobór zbrojenia), pusty start projektu.
 
 ## Struktura źródeł
 

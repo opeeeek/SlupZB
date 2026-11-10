@@ -166,7 +166,7 @@ function defaultState() {
     },
     sec2: { method: 'nc', imp: 'theta', ei: '', c: '10', creep: 'calc', nsVar: 'full', V2: true, biax: '539', e0: true },
     sls: { RH: 50, t0: 28, cem: 'N', phiSel: 'auto', phi: 2.0, check: true },
-    reb: { nb: 3, nh: 3, dc: 16, dm: 16, nc: 8, nci: 0, sMax: 200, set: false },
+    reb: { nb: 3, nh: 3, dc: 16, dm: 16, nc: 8, nci: 0, dci: 0, sMax: 200, set: false, pf: false, fc: null, edge: {} },
     stir: { d: 'auto', s: 'auto', pins: 'auto', hookA: 135 },
     det: { base: 'found', top: 'cont', hTop: 300, hF: 800, cF: 50, lap: '100', sigma: 'fyd', Lmax: 12, kicker: 0 },
     fire: { R: '-', side: 'more', eta: 0.7, muSel: 'auto', mu: 0.7, l0fiK: 0.7 },
@@ -256,15 +256,25 @@ function normalize(S0) {
   rb.dc = num(rb.dc, 16); rb.dm = num(rb.dm, rb.dc); rb.set = rb.set !== false;
   rb.nci = clamp(Math.round(num(rb.nci, 0)), 0, 40); if (rb.nci > 0 && rb.nci < 4) rb.nci = 4;
   rb.sMax = Math.max(0, num(rb.sMax, 200));
+  rb.dci = num(rb.dci, 0); rb.vibOn = rb.vibOn === true; rb.vib = clamp(num(rb.vib, 50), 20, 90);
+  // zbrojenie zadane osobno dla każdego boku prostokąta (pf) – liczba prętów pośrednich i ich średnica
+  rb.pf = !!rb.pf;
+  const fc0 = rb.fc && typeof rb.fc === 'object' ? rb.fc : {};
+  rb.fc = {}; FACES.forEach(k => { const f = fc0[k] || {}, n0 = k === 'top' || k === 'bot' ? rb.nb - 2 : rb.nh - 2; rb.fc[k] = { n: clamp(Math.round(num(f.n, n0)), 0, 14), d: num(f.d, rb.dm) }; });
+  const ed0 = rb.edge && typeof rb.edge === 'object' ? rb.edge : {};
+  rb.edge = {}; Object.keys(ed0).forEach(k => { const e = ed0[k] || {}; if (!/^\d+$/.test(k)) return; const o = {}; if (e.n !== undefined && e.n !== 'auto' && e.n !== '') o.n = clamp(Math.round(num(e.n, 0)), 0, 20); if (e.d) o.d = num(e.d, rb.dm); if (Object.keys(o).length) rb.edge[k] = o; });
   const st = S.stir;
   st.d = st.d === 'auto' ? 'auto' : num(st.d, 8); st.s = st.s === 'auto' || st.s === '' ? 'auto' : num(st.s, 200);
   if (!['auto', 'all', 'none'].includes(st.pins)) st.pins = 'auto';
   st.hookA = num(st.hookA, 135) === 90 ? 90 : 135;
+  const optA = v => (v === 'auto' || v === '' || v === null || v === undefined || !isFinite(+v)) ? 'auto' : Math.max(0, +v);
+  st.sRed = optA(st.sRed); st.zB = optA(st.zB); st.zT = optA(st.zT);
   const dt = S.det;
   dt.base = dt.base === 'col' ? 'col' : 'found'; dt.top = dt.top === 'anch' ? 'anch' : 'cont';
   ['hTop', 'hF', 'cF', 'Lmax', 'kicker'].forEach(k => dt[k] = num(dt[k], D.det[k]));
   if (!['50', '100'].includes(String(dt.lap))) dt.lap = '100'; dt.lap = String(dt.lap);
   dt.sigma = dt.sigma === 'actual' ? 'actual' : 'fyd';
+  dt.l0Man = (dt.l0Man === 'auto' || dt.l0Man === '' || dt.l0Man == null || !isFinite(+dt.l0Man)) ? 'auto' : Math.max(0, +dt.l0Man);
   const F = S.fire;
   if (!FIRE_COL[F.R]) F.R = '-';
   F.side = F.side === 'one' ? 'one' : 'more';
@@ -434,7 +444,19 @@ function coverCalc(S, m, dMain, dSw) {
 
 /* --------------------------------------------------------- układ prętów */
 const tieDiaAuto = dmax => TIE_DIAS.find(d => d >= Math.max(6, dmax / 4)) || 12;
-function tieDia(S) { const dmax = Math.max(S.reb.dc, ['circ', 'ring'].includes(S.geom.shape) ? 0 : S.reb.dm); return S.stir.d === 'auto' ? tieDiaAuto(dmax) : S.stir.d; }
+// boki prostokąta: góra, dół (pręty wzdłuż b), lewy, prawy (pręty wzdłuż h)
+const FACES = ['top', 'bot', 'lft', 'rgt'];
+const FACE_N = { top: 'górny', bot: 'dolny', lft: 'lewy', rgt: 'prawy' };
+function rectFaces(S) { const rb = S.reb; if (rb.pf && rb.fc) return rb.fc; const o = {}; FACES.forEach(k => { o[k] = { n: Math.max(0, (k === 'top' || k === 'bot' ? rb.nb : rb.nh) - 2), d: rb.dm }; }); return o; }
+// największa średnica prętów podłużnych (strzemiona auto, otulina c_min,b)
+function rebDmax(S) {
+  const rb = S.reb, sh = S.geom.shape;
+  if (sh === 'circ') return rb.dc;
+  if (sh === 'ring') return Math.max(rb.dc, rb.nci ? (rb.dci || rb.dc) : 0);
+  if (sh === 'rect') { if (!rb.pf) return Math.max(rb.dc, rb.dm); const F = rectFaces(S); return Math.max(rb.dc, ...FACES.map(k => F[k].n ? F[k].d : 0)); }
+  return Math.max(rb.dc, rb.dm, ...Object.values(rb.edge || {}).map(e => e.d || 0));
+}
+function tieDia(S) { const dmax = rebDmax(S); return S.stir.d === 'auto' ? tieDiaAuto(dmax) : S.stir.d; }
 // pokrycie prętów w świetle ≤ 150 mm od pręta utrzymanego strzemieniem (9.5.3(6)) – zachłannie, najmniej szpilek
 function restrainFace(pos, dia, mode, pre) {
   const n = pos.length, R = pre ? pre.slice() : new Array(n).fill(false);
@@ -451,19 +473,31 @@ function restrainFace(pos, dia, mode, pre) {
   }
   return R;
 }
+// opis zbrojenia podłużnego (raport, zestawienia)
+function rebText(R) {
+  const S = R.S, g = R.g, lay = R.lay, rb = S.reb;
+  if (!lay.n) return '';
+  if (g.circ) return `${lay.n}⌀${lay.dmax} równomiernie na obwodzie`;
+  if (g.ring) return `${rb.nc}⌀${rb.dc} na obwodzie zewnętrznym${rb.nci ? ` i ${rb.nci}⌀${rb.dci || rb.dc} na obwodzie wewnętrznym` : ''}`;
+  if (g.isPoly) { const nC = lay.bars.filter(q => q.corner).length, mid = lay.bars.filter(q => !q.corner), ds = [...new Set(mid.map(q => q.d))];
+    return `${lay.n} prętów: ⌀${rb.dc} w narożach i przecięciach obrysów strzemion (${nC} szt.)` + (mid.length ? `, pośrednie ${ds.map(d => `${mid.filter(q => q.d === d).length}⌀${d}`).join(' + ')} na ścianach` + ((lay.edges || []).some(e => e.man) ? ' (liczba prętów zadana dla krawędzi)' : rb.sMax ? ` co ≤ ${rb.sMax} mm` : '') : ''); }
+  const F = lay.faces, fs = FACES.map(k => F[k]);
+  if (!lay.pf) return `${lay.n} prętów: narożne 4⌀${rb.dc}${lay.n > 4 ? `, pośrednie ⌀${rb.dm} (wzdłuż b: ${rb.nb} szt., wzdłuż h: ${rb.nh} szt. – z narożnymi)` : ''}`;
+  return `${lay.n} prętów: narożne 4⌀${rb.dc}` + (fs.some(f => f.nm) ? '; pośrednie – ' + fs.map(f => `bok ${FACE_N[f.k]} ${f.nm ? `${f.nm}⌀${f.d}` : '—'}`).join(', ') : '');
+}
 function layoutBars(S, g, cov, m) {
   const rb = S.reb, dt = tieDia(S), c = cov.cnom, rin = mandrelMin(dt) / 2;
   const lay = { bars: [], dt, issues: [], faces: {}, legs: { y: 2, z: 2 }, pins: [], set: rb.set };
   const smin = d => Math.max(d, S.mat.dg + 5, 20);
   if (!rb.set) { lay.As = 0; lay.n = 0; lay.dmax = 0; lay.dmin = 0; return lay; }
   if (g.ring) {
-    const d = rb.dc, n = rb.nc, ni = rb.nci, Rs = g.D / 2 - c - dt - d / 2, Rsi = g.Di / 2 + c + dt + d / 2;
+    const d = rb.dc, di = rb.dci || rb.dc, n = rb.nc, ni = rb.nci, Rs = g.D / 2 - c - dt - d / 2, Rsi = g.Di / 2 + c + dt + di / 2;
     lay.Rs = Rs; lay.Rt = g.D / 2 - c - dt / 2; lay.Rsi = ni ? Rsi : null; lay.Rti = ni ? g.Di / 2 + c + dt / 2 : null;
-    for (let k = 0; k < n; k++) { const t = (k + 0.5) * 2 * Math.PI / n; lay.bars.push({ x: g.D / 2 + Rs * Math.sin(t), y: g.D / 2 - Rs * Math.cos(t), d, A: area(d), corner: false, face: 'c' }); }
-    for (let k = 0; k < ni; k++) { const t = (k + 0.5) * 2 * Math.PI / ni; lay.bars.push({ x: g.D / 2 + Rsi * Math.sin(t), y: g.D / 2 - Rsi * Math.cos(t), d, A: area(d), corner: false, face: 'ci' }); }
+    for (let k = 0; k < n; k++) { const t = (k + 0.5) * 2 * Math.PI / n; lay.bars.push({ x: g.D / 2 + Rs * Math.sin(t), y: g.D / 2 - Rs * Math.cos(t), d, A: area(d), corner: false, face: 'c', side: 'out' }); }
+    for (let k = 0; k < ni; k++) { const t = (k + 0.5) * 2 * Math.PI / ni; lay.bars.push({ x: g.D / 2 + Rsi * Math.sin(t), y: g.D / 2 - Rsi * Math.cos(t), d: di, A: area(di), corner: false, face: 'ci', side: 'in' }); }
     const ch = 2 * Rs * Math.sin(Math.PI / n), chi = ni ? 2 * Rsi * Math.sin(Math.PI / ni) : Infinity;
-    lay.smin = smin(d); lay.faces.c = { n, clear: Math.min(ch, chi) - d, ctc: ch };
-    if (ni && Rs - Rsi - d < lay.smin) lay.issues.push('ścianka za cienka na dwie warstwy prętów');
+    lay.smin = smin(Math.max(d, ni ? di : 0)); lay.faces.c = { n, clear: Math.min(ch - d, chi - di), ctc: ch, ctcIn: ni ? chi : 0, clearOut: ch - d, clearIn: ni ? chi - di : Infinity };
+    if (ni && Rs - Rsi - (d + di) / 2 < lay.smin) lay.issues.push('ścianka za cienka na dwie warstwy prętów');
     if (Rs - d / 2 < g.Di / 2 + c) lay.issues.push('pręty nie mieszczą się w ściance');
     lay.legs = { y: 2, z: 2 }; lay.restrained = lay.bars.length;
   } else if (g.isPoly) {
@@ -471,37 +505,49 @@ function layoutBars(S, g, cov, m) {
   } else if (g.circ) {
     const d = rb.dc, n = rb.nc, Rs = g.D / 2 - c - dt - d / 2;
     lay.Rs = Rs; lay.Rt = g.D / 2 - c - dt / 2;
-    for (let k = 0; k < n; k++) { const t = (k + 0.5) * 2 * Math.PI / n; lay.bars.push({ x: g.D / 2 + Rs * Math.sin(t), y: g.D / 2 - Rs * Math.cos(t), d, A: area(d), corner: false, face: 'c' }); }
+    for (let k = 0; k < n; k++) { const t = (k + 0.5) * 2 * Math.PI / n; lay.bars.push({ x: g.D / 2 + Rs * Math.sin(t), y: g.D / 2 - Rs * Math.cos(t), d, A: area(d), corner: false, face: 'c', side: 'out' }); }
     const chord = 2 * Rs * Math.sin(Math.PI / n);
     lay.clear = { c: chord - d }; lay.smin = smin(d);
     lay.faces.c = { n, clear: chord - d, ctc: chord };
     lay.legs = { y: 2, z: 2 }; lay.restrained = lay.bars.length;
   } else {
-    const nb = rb.nb, nh = rb.nh, dc = rb.dc, dm = rb.dm;
-    const offC = c + dt + Math.max(dc / 2, rin - (rin - dc / 2) / Math.SQRT2);
-    const offM = c + dt + dm / 2;
-    lay.offC = offC; lay.offM = offM; lay.rin = rin;
-    const xs = [], ys = [];
-    for (let k = 0; k < nb; k++) xs.push(offC + k * (g.b - 2 * offC) / (nb - 1));
-    for (let k = 0; k < nh; k++) ys.push(offC + k * (g.h - 2 * offC) / (nh - 1));
-    const dB = xs.map((_, k) => (k === 0 || k === nb - 1) ? dc : dm), dH = ys.map((_, k) => (k === 0 || k === nh - 1) ? dc : dm);
-    const rB = restrainFace(xs, dB, S.stir.pins), rH = restrainFace(ys, dH, S.stir.pins);
-    const add = (x, y, d, corner, face, rest) => lay.bars.push({ x, y, d, A: area(d), corner, face, rest });
-    add(offC, offC, dc, true, 'c', true); add(g.b - offC, offC, dc, true, 'c', true); add(offC, g.h - offC, dc, true, 'c', true); add(g.b - offC, g.h - offC, dc, true, 'c', true);
-    for (let k = 1; k < nb - 1; k++) { add(xs[k], offM, dm, false, 'b', rB[k]); add(xs[k], g.h - offM, dm, false, 'b', rB[k]); }
-    for (let k = 1; k < nh - 1; k++) { add(offM, ys[k], dm, false, 'h', rH[k]); add(g.b - offM, ys[k], dm, false, 'h', rH[k]); }
-    const clr = (p, d) => { let mn = Infinity; for (let k = 0; k < p.length - 1; k++) mn = Math.min(mn, p[k + 1] - p[k] - (d[k] + d[k + 1]) / 2); return mn; };
-    const farB = (() => { let mx = 0; xs.forEach((x, k) => { let best = Infinity; xs.forEach((x2, j) => { if (rB[j]) best = Math.min(best, Math.abs(x - x2) - (dB[k] + dB[j]) / 2); }); mx = Math.max(mx, rB[k] ? 0 : best); }); return mx; })();
-    const farH = (() => { let mx = 0; ys.forEach((y, k) => { let best = Infinity; ys.forEach((y2, j) => { if (rH[j]) best = Math.min(best, Math.abs(y - y2) - (dH[k] + dH[j]) / 2); }); mx = Math.max(mx, rH[k] ? 0 : best); }); return mx; })();
-    lay.faces.b = { n: nb, pos: xs, dia: dB, rest: rB, clear: clr(xs, dB), ctc: nb > 1 ? xs[1] - xs[0] : 0, far: farB };
-    lay.faces.h = { n: nh, pos: ys, dia: dH, rest: rH, clear: clr(ys, dH), ctc: nh > 1 ? ys[1] - ys[0] : 0, far: farH };
-    lay.smin = smin(Math.max(dc, dm));
-    // szpilki: w kierunku h (łączą pręty ścian b) i w kierunku b (łączą pręty ścian h)
-    for (let k = 1; k < nb - 1; k++) if (rB[k]) lay.pins.push({ dir: 'h', x: xs[k], d: dm });
-    for (let k = 1; k < nh - 1; k++) if (rH[k]) lay.pins.push({ dir: 'b', y: ys[k], d: dm });
+    // przekrój prostokątny: 4 pręty narożne ⌀_c, na każdym boku n prętów pośrednich ⌀ (osobno dla boków górnego, dolnego, lewego i prawego)
+    const dc = rb.dc, F = rectFaces(S);
+    const offC = c + dt + Math.max(dc / 2, rin - (rin - dc / 2) / Math.SQRT2), off = d => c + dt + d / 2;
+    lay.offC = offC; lay.rin = rin; lay.pf = !!rb.pf;
+    const withM = FACES.filter(k => F[k].n > 0);
+    lay.offM = withM.length ? Math.min(...withM.map(k => off(F[k].d))) : offC;
+    const add = (x, y, d, corner, face, rest, side) => lay.bars.push({ x, y, d, A: area(d), corner, face, rest, side });
+    add(offC, offC, dc, true, 'c', true, 'c'); add(g.b - offC, offC, dc, true, 'c', true, 'c'); add(offC, g.h - offC, dc, true, 'c', true, 'c'); add(g.b - offC, g.h - offC, dc, true, 'c', true, 'c');
+    const faceOf = k => {
+      const f = F[k], hz = k === 'top' || k === 'bot', L = hz ? g.b : g.h, n = f.n;
+      const pos = [offC]; for (let j = 1; j <= n; j++) pos.push(offC + j * (L - 2 * offC) / (n + 1)); pos.push(L - offC);
+      const dia = pos.map((_, j) => (j === 0 || j === n + 1) ? dc : f.d);
+      const rest = restrainFace(pos, dia, S.stir.pins);
+      const c0 = k === 'top' || k === 'lft' ? off(f.d) : (hz ? g.h : g.b) - off(f.d);
+      for (let j = 1; j <= n; j++) add(hz ? pos[j] : c0, hz ? c0 : pos[j], f.d, false, hz ? 'b' : 'h', rest[j], k);
+      let clear = Infinity, ctc = 0, far = 0;
+      for (let j = 0; j < pos.length - 1; j++) { clear = Math.min(clear, pos[j + 1] - pos[j] - (dia[j] + dia[j + 1]) / 2); ctc = Math.max(ctc, pos[j + 1] - pos[j]); }
+      pos.forEach((u, j) => { if (rest[j]) return; let best = Infinity; pos.forEach((u2, i) => { if (rest[i]) best = Math.min(best, Math.abs(u - u2) - (dia[j] + dia[i]) / 2); }); far = Math.max(far, best); });
+      return { k, n: n + 2, nm: n, d: f.d, pos, dia, rest, clear, ctc, far, c0, hz };
+    };
+    FACES.forEach(k => { lay.faces[k] = faceOf(k); });
+    const agg = (A, B) => { const M = A.n >= B.n ? A : B; return { n: M.n, pos: M.pos, dia: M.dia, rest: M.rest, clear: Math.min(A.clear, B.clear), ctc: Math.max(A.ctc, B.ctc), far: Math.max(A.far, B.far) }; };
+    lay.faces.b = agg(lay.faces.top, lay.faces.bot); lay.faces.h = agg(lay.faces.lft, lay.faces.rgt);
+    lay.smin = smin(Math.max(dc, ...withM.map(k => F[k].d)));
+    // szpilki: w kierunku h (łączą pręty boków górnego i dolnego) i w kierunku b (boków lewego i prawego); wspólna szpilka dla prętów naprzeciw siebie
+    const pinsOf = (A, B, dir) => {
+      const P = [];
+      [A, B].forEach(fc => fc.pos.forEach((u, j) => { if (j === 0 || j === fc.pos.length - 1 || !fc.rest[j]) return; const q = P.find(p => Math.abs(p.u - u) <= (p.d + fc.dia[j]) / 2 + 5); if (q) { q.d = Math.max(q.d, fc.dia[j]); return; } P.push({ u, d: fc.dia[j] }); }));
+      P.forEach(p => lay.pins.push(dir === 'h' ? { dir, x: p.u, d: p.d } : { dir, y: p.u, d: p.d }));
+    };
+    pinsOf(lay.faces.top, lay.faces.bot, 'h'); pinsOf(lay.faces.lft, lay.faces.rgt, 'b');
     lay.legs = { y: 2 + lay.pins.filter(p => p.dir === 'h').length, z: 2 + lay.pins.filter(p => p.dir === 'b').length };
     lay.restrained = lay.bars.filter(b => b.rest).length;
     if (g.b - 2 * offC < 0 || g.h - 2 * offC < 0) lay.issues.push('pręty nie mieszczą się w przekroju');
+    // prześwit na buławę wibratora: największe pole między strzemieniem a szpilkami (8.2(4) – zagęszczenie betonu)
+    const cut = (L, ps) => { const u = [c + dt, ...ps.sort((a, b) => a - b), L - c - dt]; let mx = 0; for (let j = 0; j < u.length - 1; j++) mx = Math.max(mx, u[j + 1] - u[j]); return mx; };
+    lay.core = Math.min(cut(g.b, lay.pins.filter(p => p.dir === 'h').map(p => p.x)), cut(g.h, lay.pins.filter(p => p.dir === 'b').map(p => p.y))) - 2 * dt - Math.max(dc, ...withM.map(k => F[k].d));
   }
   lay.As = lay.bars.reduce((a, b) => a + b.A, 0);
   lay.n = lay.bars.length;
@@ -541,21 +587,37 @@ function layoutPoly(S, g, c, dt, lay, smin) {
     sides.push({ t, ax: 'x', c0: t.y0 + offM, cC: t.y0 + offC, a: t.x0 + offC, b: t.x1 - offC }, { t, ax: 'x', c0: t.y1 - offM, cC: t.y1 - offC, a: t.x0 + offC, b: t.x1 - offC });
     sides.push({ t, ax: 'y', c0: t.x0 + offM, cC: t.x0 + offC, a: t.y0 + offC, b: t.y1 - offC }, { t, ax: 'y', c0: t.x1 - offM, cC: t.x1 - offC, a: t.y0 + offC, b: t.y1 - offC });
   });
-  // pręty pośrednie: równomiernie między kolejnymi prętami utrzymanymi na boku leżącym przy zewnętrznej ścianie
   const onSide = sd => B.filter(q => (sd.ax === 'x' ? Math.abs(q.y - sd.c0) <= offC - offM + 2 && q.x >= sd.a - 2 && q.x <= sd.b + 2 : Math.abs(q.x - sd.c0) <= offC - offM + 2 && q.y >= sd.a - 2 && q.y <= sd.b + 2));
-  if (sMax > 0) sides.forEach(sd => {
-    const ex = onSide(sd).map(q => sd.ax === 'x' ? q.x : q.y).sort((u, v) => u - v);
-    for (let k = 0; k < ex.length - 1; k++) {
-      const u0 = ex[k], u1 = ex[k + 1], gap = u1 - u0, um = (u0 + u1) / 2;
-      const xm = sd.ax === 'x' ? um : sd.c0, ym = sd.ax === 'x' ? sd.c0 : um;
-      if (!inPoly(xm, ym, P) || dOut(xm, ym) > offM + 1) continue;
-      const n = Math.ceil(gap / sMax - 1e-9);
-      for (let j = 1; j < n; j++) {
-        const u = u0 + gap * j / n, x = sd.ax === 'x' ? u : sd.c0, y = sd.ax === 'x' ? sd.c0 : u;
-        if (B.some(q => Math.hypot(q.x - x, q.y - y) - (q.d + dm) / 2 < sm - 1e-6)) continue;
-        put(x, y, dm, false);
-      }
+  // pręty pośrednie na zewnętrznych krawędziach obrysu: równomiernie między prętami utrzymanymi (naroża, przecięcia strzemion);
+  // liczba wg rozstawu ≤ s_max albo zadana dla krawędzi (rb.edge[nr krawędzi] = {n, d})
+  const EO = rb.edge || {};
+  lay.edges = [];
+  edges.forEach(([pa, pb], ei) => {
+    const hz = Math.abs(pa[1] - pb[1]) < 1e-6, eC = hz ? pa[1] : pa[0], lo = Math.min(hz ? pa[0] : pa[1], hz ? pb[0] : pb[1]), hi = Math.max(hz ? pa[0] : pa[1], hz ? pb[0] : pb[1]);
+    const mx = (pa[0] + pb[0]) / 2, my = (pa[1] + pb[1]) / 2;
+    let sg = 1; if (!inPoly(mx + (hz ? 0 : 3), my + (hz ? 3 : 0), P)) sg = -1;
+    const ov = EO[ei] || {}, dE = ov.d || dm, offE = c + dt + dE / 2, cc = eC + sg * offE;
+    const on = B.filter(q => { const dist = ((hz ? q.y : q.x) - eC) * sg, u = hz ? q.x : q.y; return dist >= Math.min(offC, offE) - 2 && dist <= Math.max(offC, offE) + 2 && u >= lo - offC - 2 && u <= hi + offC + 2; });
+    const us = on.map(q => hz ? q.x : q.y).sort((u, v) => u - v);
+    const gaps = [];
+    for (let k = 0; k < us.length - 1; k++) {
+      const u0 = us[k], u1 = us[k + 1], um = (u0 + u1) / 2, xm = hz ? um : cc, ym = hz ? cc : um;
+      if (u1 - u0 < 1 || !inPoly(xm, ym, P) || dOut(xm, ym) > offE + 1) continue;
+      gaps.push({ u0, u1, len: u1 - u0, cnt: 0 });
     }
+    if (!gaps.length) return;
+    if (ov.n !== undefined) { for (let i = 0; i < ov.n; i++) { const gq = gaps.reduce((a, q) => (q.len / (q.cnt + 1) > a.len / (a.cnt + 1) ? q : a)); gq.cnt++; } }
+    else if (sMax > 0) gaps.forEach(gq => { gq.cnt = Math.max(0, Math.ceil(gq.len / sMax - 1e-9) - 1); });
+    let placed = 0, ctc = 0;
+    gaps.forEach(gq => {
+      ctc = Math.max(ctc, gq.len / (gq.cnt + 1));
+      for (let j = 1; j <= gq.cnt; j++) {
+        const u = gq.u0 + gq.len * j / (gq.cnt + 1), x = hz ? u : cc, y = hz ? cc : u;
+        if (B.some(q => Math.hypot(q.x - x, q.y - y) - (q.d + dE) / 2 < Math.min(sm, smin(dE)) - 1e-6)) continue;
+        const o = put(x, y, dE, false); o.edge = ei; placed++;
+      }
+    });
+    lay.edges.push({ ei, hz, eC, sg, lo, hi, cc, n: placed, d: dE, man: ov.n !== undefined, dman: !!ov.d, gaps: gaps.length, ctc, len: gaps.reduce((a, q) => a + q.len, 0) });
   });
   // utrzymanie prętów (≤ 150 mm w świetle od pręta utrzymanego) – po bokach strzemion; szpilki w poprzek obrysu
   let far = 0; const pins = [];
@@ -1252,7 +1314,9 @@ function anchCalc(S, m, lay, cov, tension) {
   const al1 = cd > 3 * dia ? 0.7 : 1.0;
   const lbdT = Math.max(al1 * lbrqd, lbminT);
   const lbd = Math.max(lbdC, tension ? lbdT : 0);
-  return { dia, eta1, eta2, fbd, sigma, lbrqd, a6, l0minC, l0C, l0T, l0, tension, lbminC, lbdC, lbminT, al1, lbdT, lbd, cd };
+  // długość zakładu zadana ręcznie (kliknięcie wymiaru zakładu na rysunku) – sprawdzana z wymaganą
+  const l0req = l0, l0man = S.det.l0Man !== 'auto' && S.det.l0Man > 0;
+  return { dia, eta1, eta2, fbd, sigma, lbrqd, a6, l0minC, l0C, l0T, l0: l0man ? ceilTo(S.det.l0Man, 10) : l0, l0req, l0man, tension, lbminC, lbdC, lbminT, al1, lbdT, lbd, cd };
 }
 
 /* ----------------------------------------------- strzemiona i zestawienie stali */
@@ -1268,10 +1332,13 @@ function tiesCalc(S, g, lay, anch, sh) {
   s = Math.max(50, s);
   let sRed = floorTo(Math.min(sclRed, s), sclRed < 100 ? 10 : 25); if (sRed < 50) sRed = floorTo(sclRed, 5);
   sRed = Math.max(40, Math.min(sRed, s));
+  const sRedMan = S.stir.sRed !== 'auto' && S.stir.sRed > 0 ? Math.max(40, S.stir.sRed) : null; if (sRedMan) sRed = sRedMan;
   const L = g.L;
   const zB0 = g.dmax;                                       // strefa przy stropie / fundamencie (9.5.3(4))
   const lapZone = dmaxL > 14 ? anch.l0 + 4 * dmaxL : 0;     // strefa zakładu (9.5.3(4), 8.7.4.2(4))
-  const zBot = Math.min(L, Math.max(zB0, lapZone)), zTop = Math.min(L - zBot, zB0);
+  const zBotReq = Math.min(L, Math.max(zB0, lapZone)), zTopReq = Math.min(L - zBotReq, zB0);
+  const zMan = S.stir.zB !== 'auto' || S.stir.zT !== 'auto';
+  const zBot = S.stir.zB !== 'auto' ? Math.min(L, S.stir.zB) : zBotReq, zTop = Math.min(L - zBot, S.stir.zT !== 'auto' ? S.stir.zT : zB0);
   const zMid = Math.max(0, L - zBot - zTop);
   const first = 50;
   const pos = [];
@@ -1283,7 +1350,7 @@ function tiesCalc(S, g, lay, anch, sh) {
   const sets = P.length;
   // długości
   const c = S.env.cnomSel === 'manual' ? num(S.env.cnomVal, 30) : null;
-  return { dt, dtReq, scl, sclRed, sAuto, sShear, sMan, s, sRed, zBot, zTop, zMid, lapZone, zB0, pos: P, sets, pB, pM, pT, cman: c };
+  return { dt, dtReq, scl, sclRed, sAuto, sShear, sMan, s, sRed, sRedMan, zBot, zTop, zMid, zBotReq, zTopReq, zMan, lapZone, zB0, pos: P, sets, pB, pM, pT, cman: c };
 }
 function schedule(S, g, lay, cov, anch, ties) {
   const rows = [], dt = lay.dt, c = cov.cnom;
@@ -1341,7 +1408,7 @@ function calc(S0, opts) {
   const g = R.g = geomCalc(S, R);
   if (R.errors.length) return R;
   const dt0 = tieDia(S);
-  const cov = R.cov = coverCalc(S, m, S.reb.set ? Math.max(S.reb.dc, g.round ? 0 : S.reb.dm) : 12, dt0);
+  const cov = R.cov = coverCalc(S, m, S.reb.set ? rebDmax(S) : 12, dt0);
   const lay = R.lay = layoutBars(S, g, cov, m);
   R.bare = !lay.n;
   const cr = R.creep = creepCalc(S, m, g);
@@ -1608,7 +1675,9 @@ function checksCalc(R, S) {
     opt = opt || {};
     const ratio = opt.ratio !== undefined ? opt.ratio : (opt.rel === '≥' ? (Ed > 0 ? (Rd > 0 ? Ed / Rd : Infinity) : 0) : (Rd > 0 ? Ed / Rd : (Ed > 0 ? Infinity : 0)));
     const status = opt.status || (ratio <= 1 + 1e-6 ? 'ok' : (opt.soft ? 'warn' : 'fail'));
-    C.push({ grp, id, name, ref, Ed, Rd, unit, ratio, status, rel: opt.rel || '≤', note: opt.note || '', fmt: opt.fmt, at: opt.at || null, sec: opt.sec || null });
+    // klucz stały (bez wartości liczbowych w nazwie) – znaczniki „sprawdzone” w Podsumowaniu
+    let key = id + '|' + String(name).replace(/\d+(?:[.,]\d+)?/g, '#'); while (C.some(q => q.key === key)) key += '+';
+    C.push({ grp, id, name, ref, Ed, Rd, unit, ratio, status, rel: opt.rel || '≤', note: opt.note || '', fmt: opt.fmt, at: opt.at || null, sec: opt.sec || null, key });
     return C[C.length - 1];
   };
   const gK = 'Otulina i trwałość', gD = 'Konstrukcja (rozdz. 8 i 9.5)', gN = 'SGN – ściskanie ze zginaniem', gS = 'SGN – smukłość i efekty II rzędu', gV = 'SGN – ścinanie', gU = 'SGU – naprężenia i rysy', gF = 'Odporność ogniowa (PN-EN 1992-1-2)';
@@ -1692,6 +1761,7 @@ function checksCalc(R, S) {
     else { const nC = g.convex.length, hit = g.convex.filter(([x, y]) => lay.bars.some(q => Math.hypot(q.x - x, q.y - y) <= (lay.offC || 50) * 1.5 + 2)).length; add(gD, 'nbars', 'Pręt w każdym narożu przekroju', '9.5.2(4)', nC, hit, 'szt.', { rel: '≥', ratio: hit >= nC ? nC / Math.max(hit, 1) : Infinity, status: hit >= nC ? 'ok' : 'fail', sec: 'det', note: `naroży wypukłych: ${nC}` }); }
     const clr = lay.minClear;
     if (lay.n > 1) add(gD, 'sp', 'Odstęp prętów w świetle ≥ max(⌀; d_g + 5 mm; 20 mm)', '8.2(2)', lay.smin, clr, 'mm', { rel: '≥', sec: 'det' });
+    if (lay.core !== undefined && S.reb.vibOn) add(gD, 'vib', `Prześwit na buławę wibratora ⌀${S.reb.vib} mm (pole między strzemieniem i szpilkami)`, '8.2(4)', S.reb.vib + 10, lay.core, 'mm', { rel: '≥', soft: true, note: 'zagęszczanie betonu buławą wprowadzaną od góry wewnątrz zbrojenia; wyłącz opcję przy innym sposobie zagęszczania', sec: 'det' });
     if (lay.issues.length) add(gD, 'fit', 'Rozmieszczenie prętów w przekroju', '8.2', 1, 0, '', { ratio: Infinity, status: 'fail', note: lay.issues.join('; '), fmt: 'text', sec: 'det' });
     if (!g.round) {
       const far = g.isPoly ? lay.far : Math.max(lay.faces.b.far, lay.faces.h.far);
@@ -1701,6 +1771,8 @@ function checksCalc(R, S) {
     add(gD, 'phit', 'Średnica strzemion ⌀_t ≥ max(6 mm; ⌀_max/4)', '9.5.3(1)', T.dtReq, lay.dt, 'mm', { rel: '≥', sec: 'ties' });
     add(gD, 'st', 'Rozstaw strzemion s ≤ s_cl,tmax = min(20⌀_min; b; 400 mm)', '9.5.3(3)', T.s, T.scl, 'mm', { sec: 'ties' });
     add(gD, 'st2', 'Rozstaw strzemion przy stropach i w strefie zakładów ≤ 0,6·s_cl,tmax', '9.5.3(4)', T.sRed, T.sclRed, 'mm', { sec: 'ties' });
+    if (T.zMan) { const req = Math.max(T.zBotReq, T.zTopReq), short = Math.max(T.zBotReq - T.zBot, Math.min(T.zTopReq, g.L - T.zBot) - T.zTop); add(gD, 'stz', 'Długość stref zagęszczenia strzemion (przy stropach i w strefie zakładu) – zadana ręcznie', '9.5.3(4)', Math.max(T.zBotReq, T.zTopReq), Math.max(T.zBotReq, T.zTopReq) - Math.max(0, short), 'mm', { rel: '≥', note: `dół ${Math.round(T.zBot)} mm (wymagane ${Math.round(T.zBotReq)}), góra ${Math.round(T.zTop)} mm (wymagane ${Math.round(T.zTopReq)})`, sec: 'ties' }); }
+    if (R.anch && R.anch.l0man) add(gD, 'lap', 'Długość zakładu prętów l₀ – zadana ręcznie', '8.7.3', R.anch.l0req, R.anch.l0, 'mm', { rel: '≥', sec: 'anch' });
     const sch = R.sched;
     if (sch && sch.tooLong.length) add(gD, 'Lmax', `Długość pręta ≤ L_max = ${S.det.Lmax} m`, '—', Math.max(...sch.tooLong.map(r => r.len)) / 1000, S.det.Lmax, 'm', { soft: true, note: 'podziel pręty zakładem', sec: 'sched' });
     if (S.det.base === 'found') {
@@ -1780,7 +1852,7 @@ function rebCandidates(S, g, cov) {
 }
 function applyCand(S, cd) {
   const T = JSON.parse(JSON.stringify(S));
-  T.reb.set = true; T.reb.dc = cd.d; T.reb.dm = cd.d;
+  T.reb.set = true; T.reb.dc = cd.d; T.reb.dm = cd.d; T.reb.pf = false; T.reb.edge = {}; T.reb.dci = 0;
   if (cd.sMax !== undefined) T.reb.sMax = cd.sMax;
   else if (cd.nc) { T.reb.nc = cd.nc; T.reb.nci = cd.nci || 0; }
   else { T.reb.nb = cd.nb; T.reb.nh = cd.nh; }
@@ -1863,7 +1935,7 @@ const API = {
   bucklingDir, imperfection, unitM, itemDist, genCombos, comboDesc, superpose, evalDir, m2Shape, fireCalc, anchCalc, schedule,
   autoReb, designDims, dimCandidates, applyDims, dimLabel, tryDims, badChecks, rebCandidates, applyCand, newItem, newRow, psiOf, normItem, normRow, tieDia, tieDiaAuto, barsDir, partsOf, mkCurve,
   CONCRETE, CONC_NAMES, STEEL, STEEL_LIST, BAR_DIAS, MAIN_DIAS, TIE_DIAS, EXPOSURES, EXP_DESC, PSI, VAR_KINDS, SCH, DIRS, FIRE_COL, FIRE_MIN, WMAX, MIN_CLASS, CMIN_DUR,
-  area, num, clamp, massPerM, mandrelMin, classIdx, ETA_IDS, NPT, XI,
+  area, num, clamp, massPerM, mandrelMin, classIdx, ETA_IDS, NPT, XI, FACES, FACE_N, rectFaces, rebDmax, rebText,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API;
 root.EC2 = API;

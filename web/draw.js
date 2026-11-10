@@ -54,7 +54,14 @@ D.sectionSVG = function (R, o) {
       s += `<circle cx="${cx}" cy="${cy}" r="${lay.Rt * k}" fill="none" stroke="${tieCol}" stroke-width="${tw}" ${o.edit ? 'data-z="ties" class="zhit"' : ''}/>`;
       if (lay.Rti) s += `<circle cx="${cx}" cy="${cy}" r="${lay.Rti * k}" fill="none" stroke="${tieCol}" stroke-width="${tw}" ${o.edit ? 'data-z="ties" class="zhit"' : ''}/>`;
       s += barsSVG();
-      if (o.edit) s += `<circle cx="${cx}" cy="${cy}" r="${(lay.Rs + 8) * k}" fill="transparent" data-z="bars" class="zhit barsh" style="pointer-events:stroke" stroke="transparent" stroke-width="${Math.max(10, 30 * k)}"/>`;
+      if (o.edit && o.small) s += `<circle cx="${cx}" cy="${cy}" r="${(lay.Rs + 8) * k}" fill="transparent" data-z="bars" class="zhit barsh" style="pointer-events:stroke" stroke="transparent" stroke-width="${Math.max(10, 30 * k)}"/>`;
+      if (o.edit && !o.small) {
+        const ri0 = lay.Rsi || (g.Di / 2 + c + dt + lay.dmax / 2), mid = ((lay.Rs - lay.dmax / 2) + (ri0 + lay.dmax / 2)) / 2, wid = Math.max(4, (lay.Rs - lay.dmax / 2) - (ri0 + lay.dmax / 2) - 8);
+        s += `<circle cx="${cx}" cy="${cy}" r="${mid * k}" fill="none" stroke="transparent" stroke-width="${wid * k}" style="pointer-events:stroke" data-z="ties" class="zhit inz"><title>Ścianka – strzemiona</title></circle>`;
+        s += `<circle cx="${cx}" cy="${cy}" r="${(g.D / 2 - c / 2) * k}" fill="none" stroke="transparent" stroke-width="${Math.max(6, c * k)}" style="pointer-events:stroke" data-z="cov" class="zhit covz"><title>Otulina c_nom = ${c} mm</title></circle><circle cx="${cx}" cy="${cy}" r="${(g.Di / 2 + c / 2) * k}" fill="none" stroke="transparent" stroke-width="${Math.max(6, c * k)}" style="pointer-events:stroke" data-z="cov" class="zhit covz"><title>Otulina c_nom = ${c} mm</title></circle>`;
+        s += `<circle cx="${cx}" cy="${cy}" r="${lay.Rs * k}" fill="none" stroke="transparent" stroke-width="${Math.max(12, (lay.dmax + 18) * k)}" style="pointer-events:stroke" data-z="ring:out" class="zhit ringz"><title>Pręty – obwód zewnętrzny</title></circle><circle cx="${cx}" cy="${cy}" r="${ri0 * k}" fill="none" stroke="transparent" stroke-width="${Math.max(12, (lay.dmax + 18) * k)}" style="pointer-events:stroke" data-z="ring:in" class="zhit ringz"><title>Pręty – obwód wewnętrzny${lay.Rsi ? '' : ' (brak – kliknij, aby dodać)'}</title></circle>`;
+        s += D.barHits(lay, X, Y, k);
+      }
     } else if (o.edit) s += `<circle cx="${cx}" cy="${cy}" r="${(g.D / 2 - g.t / 2) * k}" fill="transparent" stroke="transparent" stroke-width="${g.t * k}" data-z="bars" class="zhit"/>` + tx(cx, cy + 4, 'brak zbrojenia – kliknij', { fs: 11, c: C.mut });
     if (!o.small) {
       s += dimH(ox, ox + bw, oy - 16, `D = ${g.D}`) + dimH(X(g.D / 2 + g.Di / 2), ox + bw, cy, `t = ${g.t}`, { fs: 9.5 });
@@ -72,7 +79,16 @@ D.sectionSVG = function (R, o) {
       lay.pins.forEach(p => { if (p.dir === 'v') s += `<line x1="${X(p.x)}" y1="${Y(p.y0)}" x2="${X(p.x)}" y2="${Y(p.y1)}" stroke="${tieCol}" stroke-width="${tw * 0.9}"/>`; else s += `<line x1="${X(p.x0)}" y1="${Y(p.y)}" x2="${X(p.x1)}" y2="${Y(p.y)}" stroke="${tieCol}" stroke-width="${tw * 0.9}"/>`; });
       s += barsSVG();
     }
-    if (o.edit) g.rects.forEach(r => { s += `<rect x="${X(r.x0) + 2}" y="${Y(r.y0) + 2}" width="${(r.x1 - r.x0) * k - 4}" height="${(r.y1 - r.y0) * k - 4}" fill="transparent" data-z="bars" class="zhit barsh"/>`; });
+    if (o.edit && (o.small || !lay.n)) g.rects.forEach(r => { s += `<rect x="${X(r.x0) + 2}" y="${Y(r.y0) + 2}" width="${(r.x1 - r.x0) * k - 4}" height="${(r.y1 - r.y0) * k - 4}" fill="transparent" data-z="bars" class="zhit barsh"/>`; });
+    if (o.edit && !o.small && lay.n) {
+      const pth = `M${g.outline.map(([x, y]) => `${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join(' L')} Z`, inset = (c + dt + lay.offC) ;
+      g.rects.forEach(r => { const w = (r.x1 - r.x0) - 2 * inset, h = (r.y1 - r.y0) - 2 * inset; if (w > 4 && h > 4) s += `<rect x="${X(r.x0 + inset)}" y="${Y(r.y0 + inset)}" width="${w * k}" height="${h * k}" fill="transparent" data-z="ties" class="zhit inz"><title>Wnętrze – strzemiona i szpilki</title></rect>`; });
+      s += `<path d="${pth}" fill="none" stroke="transparent" stroke-width="${Math.max(8, 2 * c * k)}" style="pointer-events:stroke" data-z="cov" class="zhit covz"><title>Otulina c_nom = ${c} mm – kliknij, aby zmienić</title></path>`;
+      (lay.edges || []).forEach(e => { const a = e.lo + lay.offC + 4, b = e.hi - lay.offC - 4; if (b - a < 10) return; const th = Math.max(14, (e.d + 22) * k), L = (b - a) * k;
+        s += e.hz ? `<rect x="${X(a)}" y="${Y(e.cc) - th / 2}" width="${L}" height="${th}" fill="transparent" data-z="e:${e.ei}" class="zhit facez"><title>Krawędź – pręty pośrednie: ${e.n}⌀${e.d}${e.man ? ' (zadane)' : ' (wg rozstawu)'} – kliknij, aby zmienić</title></rect>` : `<rect x="${X(e.cc) - th / 2}" y="${Y(a)}" width="${th}" height="${L}" fill="transparent" data-z="e:${e.ei}" class="zhit facez"><title>Krawędź – pręty pośrednie: ${e.n}⌀${e.d}${e.man ? ' (zadane)' : ' (wg rozstawu)'} – kliknij, aby zmienić</title></rect>`; });
+      lay.bars.filter(q => q.corner).forEach(q => { s += `<circle cx="${X(q.x)}" cy="${Y(q.y)}" r="${Math.max(9, (q.d / 2 + 12) * k)}" fill="transparent" data-z="corner" class="zhit cornz"><title>Pręty w narożach i przecięciach strzemion ⌀${q.d} – kliknij, aby zmienić</title></circle>`; });
+      s += D.barHits(lay, X, Y, k);
+    }
     if (!lay.n && o.edit) s += tx(X(g.xc), Y(g.yc), 'brak zbrojenia – kliknij', { fs: 11, c: C.mut });
     if (!o.small) {
       const G = S.geom;
@@ -87,8 +103,10 @@ D.sectionSVG = function (R, o) {
     s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.4" ${o.edit ? 'data-z="dims" class="zhit"' : ''}/>`;
     if (lay.n) {
       const rt = (g.D / 2 - c - dt / 2) * k;
-      s += `<circle cx="${cx}" cy="${cy}" r="${rt}" fill="none" stroke="${fail.ties ? C.red : C.tie}" stroke-width="${Math.max(1.4, dt * k)}" ${o.edit ? 'data-z="ties" class="zhit"' : ''}/>`;
-      lay.bars.forEach((b, i) => { s += `<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${Math.max(2, b.d / 2 * k)}" fill="${fail.bars ? C.red : C.bar}" ${o.edit ? 'data-z="bars"' : ''}/>`; });
+      if (o.edit && !o.small) s += `<circle cx="${cx}" cy="${cy}" r="${(lay.Rs - lay.dmax / 2 - 6) * k}" fill="transparent" data-z="ties" class="zhit inz"><title>Wnętrze – strzemiona</title></circle>` + `<circle cx="${cx}" cy="${cy}" r="${(g.D / 2 - c / 2) * k}" fill="none" stroke="transparent" stroke-width="${Math.max(6, c * k)}" style="pointer-events:stroke" data-z="cov" class="zhit covz"><title>Otulina c_nom = ${c} mm – kliknij, aby zmienić</title></circle>`;
+      s += `<circle cx="${cx}" cy="${cy}" r="${rt}" fill="none" stroke="${fail.ties ? C.red : C.tie}" stroke-width="${Math.max(1.4, dt * k)}" ${o.edit ? 'data-z="ties" class="zhit tieh"' : ''}/>`;
+      lay.bars.forEach((b, i) => { s += `<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${Math.max(2, b.d / 2 * k)}" fill="${fail.bars ? C.red : C.bar}" ${o.edit && o.small ? 'data-z="bars"' : ''}/>`; });
+      if (o.edit && !o.small) s += `<circle cx="${cx}" cy="${cy}" r="${lay.Rs * k}" fill="none" stroke="transparent" stroke-width="${Math.max(14, (lay.dmax + 24) * k)}" style="pointer-events:stroke" data-z="ring:out" class="zhit ringz"><title>Pręty na obwodzie – kliknij: liczba i średnica</title></circle>` + D.barHits(lay, X, Y, k);
     }
     if (!o.small) {
       s += dimH(ox, ox + bw, oy - 16, `D = ${g.D}`);
@@ -114,18 +132,40 @@ D.sectionSVG = function (R, o) {
         else { const y = Y(p.y) + sh; s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="${tieCol}" stroke-width="${tw * 0.9}"/><path d="M${x0},${y} l${5},${-5}" stroke="${tieCol}" stroke-width="${tw * 0.8}" fill="none"/><path d="M${x1},${y} l${-5},${-5}" stroke="${tieCol}" stroke-width="${tw * 0.8}" fill="none"/>`; }
       });
       lay.bars.forEach(b => { s += `<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${Math.max(2, b.d / 2 * k)}" fill="${fail.bars ? C.red : C.bar}" ${!b.corner && !b.rest && !o.small ? `stroke="${C.warn}" stroke-width="1.2"` : ''}/>`; });
-      if (o.edit) s += `<rect x="${ox + 2}" y="${oy + 2}" width="${bw - 4}" height="${bh - 4}" fill="transparent" data-z="bars" class="zhit barsh"/>`;
+      if (o.edit && o.small) s += `<rect x="${ox + 2}" y="${oy + 2}" width="${bw - 4}" height="${bh - 4}" fill="transparent" data-z="bars" class="zhit barsh"/>`;
+      if (o.edit && !o.small) {
+        // strefy kliknięcia: otulina (pas przy krawędziach), wnętrze (strzemiona), każdy bok (pręty pośrednie tego boku), naroża, pojedyncze pręty
+        const ci = (c + dt) * k, F = lay.faces, band = Math.max(...['top', 'bot', 'lft', 'rgt'].map(q => F[q].d), S.reb.dc) + 22;
+        s += `<path d="M${ox},${oy} h${bw} v${bh} h${-bw} Z M${ox + ci},${oy + ci} v${bh - 2 * ci} h${bw - 2 * ci} v${-(bh - 2 * ci)} Z" fill="transparent" fill-rule="evenodd" data-z="cov" class="zhit covz"><title>Otulina c_nom = ${c} mm – kliknij, aby zmienić</title></path>`;
+        const ins = (c + dt + band) * k; if (bw - 2 * ins > 6 && bh - 2 * ins > 6) s += `<rect x="${ox + ins}" y="${oy + ins}" width="${bw - 2 * ins}" height="${bh - 2 * ins}" fill="transparent" data-z="ties" class="zhit inz"><title>Wnętrze – strzemiona i szpilki: kliknij, aby zmienić</title></rect>`;
+        const FN = { top: 'górny', bot: 'dolny', lft: 'lewy', rgt: 'prawy' };
+        ['top', 'bot', 'lft', 'rgt'].forEach(q => { const f = F[q], a = lay.offC + S.reb.dc / 2 + 4, L = ((f.hz ? g.b : g.h) - 2 * a) * k, th = Math.max(14, band * k), t = `<title>Bok ${FN[q]}: ${f.nm ? `${f.nm}⌀${f.d}` : 'bez prętów pośrednich'} – kliknij, aby zmienić zbrojenie tylko tego boku</title>`;
+          if (L < 6) return;
+          s += f.hz ? `<rect x="${X(a)}" y="${Y(f.c0) - th / 2}" width="${L}" height="${th}" fill="transparent" data-z="f:${q}" class="zhit facez">${t}</rect>` : `<rect x="${X(f.c0) - th / 2}" y="${Y(a)}" width="${th}" height="${L}" fill="transparent" data-z="f:${q}" class="zhit facez">${t}</rect>`; });
+        lay.bars.filter(q => q.corner).forEach(q => { s += `<circle cx="${X(q.x)}" cy="${Y(q.y)}" r="${Math.max(9, (q.d / 2 + 12) * k)}" fill="transparent" data-z="corner" class="zhit cornz"><title>Pręty narożne 4⌀${q.d} – kliknij, aby zmienić</title></circle>`; });
+        s += D.barHits(lay, X, Y, k);
+      }
     } else if (o.edit) s += `<rect x="${ox}" y="${oy}" width="${bw}" height="${bh}" fill="transparent" data-z="bars" class="zhit"/>` + tx(ox + bw / 2, oy + bh / 2, 'brak zbrojenia – kliknij', { fs: 11, c: C.mut });
     if (!o.small) {
       s += `<g ${o.edit ? 'data-z="dims" class="zdim"' : ''}>` + dimH(ox, ox + bw, oy - 16, `b = ${g.b}`) + dimV(ox - 18, oy, oy + bh, `h = ${g.h}`) + '</g>';
       if (lay.n) {
         // odstępy osiowe prętów (łańcuch pod przekrojem i z prawej)
-        const fb = lay.faces.b, fh = lay.faces.h;
-        if (fb && fb.n > 2 && bw > 120) { const yy = oy + bh + 14; s += dimH(X(fb.pos[0]), X(fb.pos[fb.n - 1]), yy, `${fb.n - 1}×${fmt(fb.ctc, 0)}`, { below: true, fs: 9.5 }); }
-        if (fh && fh.n > 2 && bh > 120) { s += dimV(ox + bw + 14, Y(fh.pos[0]), Y(fh.pos[fh.n - 1]), `${fh.n - 1}×${fmt(fh.ctc, 0)}`, { right: true, fs: 9.5 }); }
+        const F = lay.faces, sm = lay.smin, lbl = f => `${f.n - 1}×${fmt(f.ctc, 0)}`, bad = f => f.clear < sm - 0.5;
+        const same = (A, B) => A.nm === B.nm && A.d === B.d;
+        if (F.bot.nm && bw > 120) s += dimH(X(F.bot.pos[0]), X(F.bot.pos[F.bot.n - 1]), oy + bh + 14, lbl(F.bot), { below: true, fs: 9.5, c: bad(F.bot) ? C.red : undefined });
+        if (F.rgt.nm && bh > 120) s += dimV(ox + bw + 14, Y(F.rgt.pos[0]), Y(F.rgt.pos[F.rgt.n - 1]), lbl(F.rgt), { right: true, fs: 9.5, c: bad(F.rgt) ? C.red : undefined });
+        if (F.top.nm && !same(F.top, F.bot) && bw > 120) s += dimH(X(F.top.pos[0]), X(F.top.pos[F.top.n - 1]), oy - 32, lbl(F.top), { fs: 9.5, c: bad(F.top) ? C.red : undefined });
+        if (F.lft.nm && !same(F.lft, F.rgt) && bh > 120) s += dimV(ox - 34, Y(F.lft.pos[0]), Y(F.lft.pos[F.lft.n - 1]), lbl(F.lft), { fs: 9.5, c: bad(F.lft) ? C.red : undefined });
+        ['top', 'bot', 'lft', 'rgt'].forEach(q => { const f = F[q]; if (!bad(f)) return; const p = f.hz ? [ox + bw / 2, Y(f.c0) + (q === 'top' ? 16 : -10)] : [X(f.c0) + (q === 'lft' ? 10 : -10), oy + bh / 2];
+          s += tx(p[0], p[1], `s_cl = ${fmt(f.clear, 0)} < ${fmt(sm, 0)}`, { fs: 9.5, c: C.red, w: 600, a: f.hz ? 'middle' : (q === 'lft' ? 'start' : 'end') }); });
         s += tx(ox, oy + bh + 40, `c_nom = ${c} mm · ${lay.n}⌀${lay.dmax}${lay.dmin !== lay.dmax ? '/' + lay.dmin : ''} · strz. ⌀${dt}`, { fs: 10.5, c: C.acc, a: 'start' });
       }
     }
+  }
+  if (o.starter && lay.n) {
+    // pręty startowe / słupa niższego w strefie zakładu – obok prętów słupa, przesunięte do wnętrza
+    const cx0 = g.round ? g.D / 2 : g.isPoly ? g.xc : g.b / 2, cy0 = g.round ? g.D / 2 : g.isPoly ? g.yc : g.h / 2;
+    lay.bars.forEach(b => { const vx = cx0 - b.x, vy = cy0 - b.y, L2 = Math.hypot(vx, vy) || 1, sh = b.d * 1.05; s += `<circle cx="${X(b.x + vx / L2 * sh)}" cy="${Y(b.y + vy / L2 * sh)}" r="${Math.max(2, b.d / 2 * k)}" fill="#ffffff" stroke="${C.acc}" stroke-width="1.3"/>`; });
   }
   if (o.axes !== false && !o.small) {
     // osie lokalne: y wzdłuż b, z wzdłuż h (jak rys. 5.8 PN-EN 1992-1-1)
@@ -134,6 +174,11 @@ D.sectionSVG = function (R, o) {
       tx(ax + 30, ay + 3.5, 'y', { fs: 9.5, c: C.mut, a: 'start' }) + tx(ax + 5, ay - 24, 'z', { fs: 9.5, c: C.mut, a: 'start' });
   }
   return s + '</svg>';
+};
+
+// pręty do zaznaczania (klik – zaznacz, Ctrl/Shift + klik – kilka, Delete – usuń)
+D.barHits = function (lay, X, Y, k) {
+  return `<g class="bhits">${lay.bars.map((b, i) => `<circle cx="${X(b.x)}" cy="${Y(b.y)}" r="${Math.max(4, (b.d / 2 + 2) * k)}" fill="transparent" class="barhit" data-bi="${i}"><title>Pręt ⌀${b.d}${b.corner ? ' (narożny)' : ''} – kliknij, aby zaznaczyć (Delete – usuń)</title></circle>`).join('')}</g>`;
 };
 
 /* ---------------------------------------------- odkształcenia i naprężenia (SGN) */
@@ -182,10 +227,10 @@ D.schemeSVG = function (R, S, dir, o) {
   o = o || {};
   const g = R.g, B = R.buck[dir], sch = B.sch;
   const W = o.W || 300, H = o.H || 440;
-  const mt = 96, mb = 54, cx = W * 0.44, hh = H - mt - mb;
+  const mt = 96, mb = 76, cx = W * 0.44, hh = H - mt - mb;
   const depth = g.dir[dir].depth, cw = Math.max(14, Math.min(34, depth / 25));
   const Y = xi => mt + (1 - xi) * hh;                 // ξ = 0 – podstawa
-  let s = svgOpen(W, H, `class="schemesvg" data-dir="${dir}"`);
+  let s = svgOpen(W, H, `class="schemesvg" data-dir="${dir}" data-mt="${mt}" data-hh="${hh}" data-l="${g.L}"`);
   s += tx(8, 16, dir === 'y' ? 'Płaszczyzna h – zginanie M_y' : 'Płaszczyzna b – zginanie M_z', { fs: 11.5, w: 650, a: 'start' });
   s += tx(8, 30, `${B.schName.replace(/ \(.*\)/, '')}${B.braced ? '' : ''}`, { fs: 9.5, a: 'start', c: C.ink2 });
   // słup
@@ -209,39 +254,90 @@ D.schemeSVG = function (R, S, dir, o) {
     // obciążenia (wartości obliczeniowe tej kombinacji)
     const NT = fr.Ntop;
     const tipY = Y(1) - ({ pp: 15, fp: 15, ff: 9, ffs: 16, cant: 2 }[sch] || 2);
-    s += `<g stroke="${C.vio}" fill="${C.vio}"><line x1="${cx}" y1="${tipY - 34}" x2="${cx}" y2="${tipY}" stroke-width="1.8"/><path d="M${cx - 4},${tipY - 8} l4,8 l4,-8z"/></g>` + tx(cx - 6, tipY - 24, `N_Ed = ${fmt(NT / 1e3, 0)} kN`, { fs: 10, c: C.vio, a: 'end', w: 600 });
+    s += `<g class="ldhit" data-ld="N" style="cursor:pointer"><title>Siła podłużna – kliknij, aby zmienić obciążenia</title><rect x="${cx - 70}" y="${tipY - 38}" width="80" height="40" fill="transparent"/><g stroke="${C.vio}" fill="${C.vio}"><line x1="${cx}" y1="${tipY - 34}" x2="${cx}" y2="${tipY}" stroke-width="1.8"/><path d="M${cx - 4},${tipY - 8} l4,8 l4,-8z"/></g>` + tx(cx - 6, tipY - 24, `N_Ed = ${fmt(NT / 1e3, 0)} kN`, { fs: 10, c: C.vio, a: 'end', w: 600 }) + '</g>';
     // poziome: siły skupione w głowicy i obciążenie rozłożone (suma wkładów pozycji)
     let H0 = 0, q0 = 0;
     (R.items || []).forEach((it, i) => { const f = oc.c.f[i]; if (!f || it.kind === 'sw') return; H0 += f * (dir === 'y' ? it.Hh || 0 : it.Hb || 0); q0 += f * (dir === 'y' ? it.qh || 0 : it.qb || 0); });
-    if (Math.abs(H0) > 1e-6) { const sg = H0 > 0 ? 1 : -1, xa = cx + sg * (cw / 2 + 4); s += `<g stroke="${C.acc}" fill="${C.acc}"><line x1="${xa + sg * 34}" y1="${Y(1) + 8}" x2="${xa}" y2="${Y(1) + 8}" stroke-width="1.6"/><path d="M${xa},${Y(1) + 8} l${-sg * 8},-4 v8z"/></g>` + tx(xa + sg * 36, Y(1) + 4, `H = ${fmt(Math.abs(H0), 1)} kN`, { fs: 9.5, c: C.acc, a: sg > 0 ? 'start' : 'end' }); }
-    if (Math.abs(q0) > 1e-6) { const sg = q0 > 0 ? 1 : -1; let qq = ''; for (let i = 1; i < 8; i++) { const y = Y(i / 8), xa = cx - sg * (cw / 2 + 2); qq += `<line x1="${xa - sg * 18}" y1="${y}" x2="${xa}" y2="${y}"/><path d="M${xa},${y} l${-sg * 5},-2.5 v5z"/>`; } s += `<g stroke="${C.acc}" fill="${C.acc}" stroke-width="1">${qq}<line x1="${cx - sg * (cw / 2 + 20)}" y1="${Y(7 / 8)}" x2="${cx - sg * (cw / 2 + 20)}" y2="${Y(1 / 8)}"/></g>` + tx(cx - sg * (cw / 2 + 20), Y(7 / 8) - 8, `q = ${fmt(Math.abs(q0), 2)} kN/m`, { fs: 9.5, c: C.acc, a: sg > 0 ? 'end' : 'start' }); }
+    if (Math.abs(H0) > 1e-6) { const sg = H0 > 0 ? 1 : -1, xa = cx + sg * (cw / 2 + 4); s += `<g class="ldhit" data-ld="H" style="cursor:pointer"><title>Siła pozioma – kliknij, aby zmienić</title><rect x="${Math.min(xa, xa + sg * 70)}" y="${Y(1) - 6}" width="70" height="20" fill="transparent"/></g><g stroke="${C.acc}" fill="${C.acc}"><line x1="${xa + sg * 34}" y1="${Y(1) + 8}" x2="${xa}" y2="${Y(1) + 8}" stroke-width="1.6"/><path d="M${xa},${Y(1) + 8} l${-sg * 8},-4 v8z"/></g>` + tx(xa + sg * 36, Y(1) + 4, `H = ${fmt(Math.abs(H0), 1)} kN`, { fs: 9.5, c: C.acc, a: sg > 0 ? 'start' : 'end' }); }
+    if (Math.abs(q0) > 1e-6) { const sg = q0 > 0 ? 1 : -1; let qq = ''; s += `<g class="ldhit" data-ld="q" style="cursor:pointer"><title>Obciążenie poziome na wysokości – kliknij, aby zmienić</title><rect x="${Math.min(cx - sg * (cw / 2 + 24), cx - sg * (cw / 2))}" y="${Y(7 / 8)}" width="24" height="${Y(1 / 8) - Y(7 / 8)}" fill="transparent"/></g>`; for (let i = 1; i < 8; i++) { const y = Y(i / 8), xa = cx - sg * (cw / 2 + 2); qq += `<line x1="${xa - sg * 18}" y1="${y}" x2="${xa}" y2="${y}"/><path d="M${xa},${y} l${-sg * 5},-2.5 v5z"/>`; } s += `<g stroke="${C.acc}" fill="${C.acc}" stroke-width="1">${qq}<line x1="${cx - sg * (cw / 2 + 20)}" y1="${Y(7 / 8)}" x2="${cx - sg * (cw / 2 + 20)}" y2="${Y(1 / 8)}"/></g>` + tx(cx - sg * (cw / 2 + 20), Y(7 / 8) - 8, `q = ${fmt(Math.abs(q0), 2)} kN/m`, { fs: 9.5, c: C.acc, a: sg > 0 ? 'end' : 'start' }); }
     // wykres
     const mode = o.diag || 'M';
+    if ((mode === 'M' || mode === 'V') && R.lay.n) s += `<rect class="mhit" x="${cx + cw / 2 + 2}" y="${Y(1)}" width="${Math.max(10, W - cx - cw / 2 - 6)}" height="${hh}" fill="transparent" style="cursor:crosshair"><title>Kliknij – przekrój i siły na tej wysokości</title></rect>`;
     if (mode === 'M' && r) {
       const ms = D.momentSeries(R, oc, dir), n = ms.M0.length - 1;
       const vals = ms.M0.map(v => v * 1e6), tot = ms.tot.map(v => v * 1e6);
-      const mx = Math.max(...tot.map(Math.abs), ...vals.map(Math.abs), 1);
+      const m0 = Math.max(...tot.map(Math.abs), ...vals.map(Math.abs), 1), mxA = a => a ? Math.max(...a.map(Math.abs)) * 1e6 : 0, inS = a => a && mxA(a) <= 2.6 * m0;
+      const off = [o.mrd && !inS(o.mrd) ? `przyjęte ${fmt(mxA(o.mrd) / 1e6, 0)}` : '', o.mrdP && !inS(o.mrdP) ? `wymagane ${fmt(mxA(o.mrdP) / 1e6, 0)}` : ''].filter(Boolean);
+      if (o.mrd && !inS(o.mrd)) o.mrd = null; if (o.mrdP && !inS(o.mrdP)) o.mrdP = null;
+      const mx = Math.max(m0, mxA(o.mrd), mxA(o.mrdP));
+      if (off.length) s += tx(W - 6, 44, `M_Rd: ${off.join(', ')} kNm (poza skalą)`, { fs: 9, a: 'end', c: C.ok });
       const sc = (W - cx - 40) / mx * 0.9;
-      const X = v => cx + v * sc;
+      const X = v => Math.max(4, Math.min(W - 4, cx + v * sc));
+      // nośność M_Rd(N_Ed(x)) – zbrojenie przyjęte (ciągła) i wymagane z doboru (przerywana), po stronie momentu
+      const sgAt = i => (tot[i] >= 0 ? 1 : -1);
+      if (o.mrd) s += `<polyline points="${o.mrd.map((v, i) => `${X(sgAt(i) * Math.abs(v) * 1e6).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.ok}" stroke-width="1.5"/>`;
+      if (o.mrdP) s += `<polyline points="${o.mrdP.map((v, i) => `${X(sgAt(i) * Math.abs(v) * 1e6).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.ok}" stroke-width="1.3" stroke-dasharray="7 3"/>`;
       const ptsT = tot.map((v, i) => `${X(v).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ');
       const pts0 = vals.map((v, i) => `${X(v).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ');
       s += `<polygon points="${cx},${Y(0)} ${ptsT} ${cx},${Y(1)}" fill="${C.red}" fill-opacity="0.12" stroke="none"/>`;
       s += `<polyline points="${ptsT}" fill="none" stroke="${C.red}" stroke-width="1.6"/><polyline points="${pts0}" fill="none" stroke="${C.acc}" stroke-width="1.3" stroke-dasharray="5 3"/>`;
       // opisy: podstawa, środek, głowica (wartości obliczeniowe z przekrojów)
       r.secs.forEach(sc2 => { const y = Y(sc2.xi), v = tot[Math.round(sc2.xi * n)]; s += `<circle cx="${X(v)}" cy="${y}" r="2.6" fill="${C.red}"/>` + tx(Math.min(W - 4, X(v) + (v >= 0 ? 5 : -5)), y + (sc2.key === 'top' ? 12 : sc2.key === 'base' ? -5 : 4), fmt(sc2.M / 1e6, 1), { fs: 9.5, c: C.red, a: v >= 0 ? 'start' : 'end', w: 600 }); });
-      s += `<g font-size="9.5"><line x1="8" y1="${H - 30}" x2="24" y2="${H - 30}" stroke="${C.acc}" stroke-dasharray="5 3"/>` + tx(28, H - 27, 'M₀ – I rząd', { fs: 9.5, a: 'start', c: C.ink2 }) + `<line x1="100" y1="${H - 30}" x2="116" y2="${H - 30}" stroke="${C.red}" stroke-width="1.6"/>` + tx(120, H - 27, 'M_Ed – z e_i i II rzędem [kNm]', { fs: 9.5, a: 'start', c: C.ink2 }) + '</g>';
+      s += `<g font-size="9.5"><line x1="8" y1="${H - 42}" x2="24" y2="${H - 42}" stroke="${C.acc}" stroke-dasharray="5 3"/>` + tx(28, H - 39, 'M₀ – I rząd', { fs: 9.5, a: 'start', c: C.ink2 }) + `<line x1="100" y1="${H - 42}" x2="116" y2="${H - 42}" stroke="${C.red}" stroke-width="1.6"/>` + tx(120, H - 39, 'M_Ed [kNm]', { fs: 9.5, a: 'start', c: C.ink2 }) +
+        (o.mrd || o.mrdP ? `<line x1="8" y1="${H - 28}" x2="24" y2="${H - 28}" stroke="${C.ok}" stroke-width="1.5" ${o.mrd ? '' : 'stroke-dasharray="7 3"'}/>` + tx(28, H - 25, o.mrd ? 'M_Rd – przyjęte' + (o.mrdP ? ' (- - wymagane)' : '') : 'M_Rd – zbrojenie wymagane', { fs: 9.5, a: 'start', c: C.ink2 }) : '') + '</g>';
+      // proponowane zbrojenie (dobór w tle) – opis przy największym momencie; kliknięcie – wybór średnicy
+      if (o.prop || o.cur) {
+        const iM = tot.reduce((a, v, i) => (Math.abs(v) > Math.abs(tot[a]) ? i : a), 0), yy = Math.max(mt + 30, Math.min(H - mb - 30, Y(iM / n) + (iM > n / 2 ? 34 : -34)));
+        const t1 = o.cur ? `przyjęte: ${o.cur}` : '', t2 = o.prop ? (o.prop.pend ? 'wymagane: dobór…' : o.prop.txt ? `wymagane: ${o.prop.txt} ▾` : o.prop.err ? 'wymagane: brak – przekrój za mały' : '') : '';
+        const tw = Math.max(t1.length, t2.length) * 5.6 + 12, bx = Math.max(cx + cw / 2 + 4, Math.min(W - tw - 4, cx + cw / 2 + 10)), lines = [t1, t2].filter(Boolean);
+        s += `<g class="dsel" data-dsel="${dir}" style="cursor:pointer"><title>Zbrojenie wymagane z doboru (najmniejsza masa stali spełniająca wszystkie warunki przy obecnych wymiarach) – kliknij, aby wybrać średnicę prętów</title><rect x="${bx}" y="${yy - 11}" width="${tw}" height="${lines.length * 13 + 5}" rx="4" fill="#ffffff" fill-opacity="0.92" stroke="${C.ok}" stroke-width="1"/>` +
+          lines.map((t, i) => tx(bx + 6, yy + i * 13, t, { fs: 10, a: 'start', c: i === lines.length - 1 && o.prop ? (o.prop.err ? C.red : C.ok) : C.ink, w: 650 })).join('') + '</g>';
+      }
     } else if (mode === 'N') {
       const mx = Math.max(Math.abs(fr.Nbot), 1), sc = (W - cx - 40) / mx * 0.8;
       s += `<polygon points="${cx},${Y(0)} ${cx + fr.Nbot * sc},${Y(0)} ${cx + fr.Ntop * sc},${Y(1)} ${cx},${Y(1)}" fill="${C.vio}" fill-opacity="0.12" stroke="${C.vio}"/>` + tx(cx + fr.Nbot * sc + 4, Y(0) - 4, fmt(fr.Nbot / 1e3, 0), { fs: 9.5, c: C.vio, a: 'start' }) + tx(cx + fr.Ntop * sc + 4, Y(1) + 12, fmt(fr.Ntop / 1e3, 0), { fs: 9.5, c: C.vio, a: 'start' });
-      s += tx(8, H - 27, 'N_Ed [kN] – z ciężarem własnym', { fs: 9.5, a: 'start', c: C.ink2 });
+      s += tx(8, H - 25, 'N_Ed [kN] – z ciężarem własnym', { fs: 9.5, a: 'start', c: C.ink2 });
+    } else if (mode === 'V') {
+      // siła poprzeczna V_Ed = dM_Ed/dx (z II rzędem), nośność V_Rd,c i V_Rd,s; strefy strzemion (kliknięcie – zmiana)
+      const ms = D.momentSeries(R, oc, dir), n = ms.tot.length - 1, Lm = g.L / 1000;
+      const V = ms.tot.map((_, i) => { const a2 = Math.max(0, i - 1), b2 = Math.min(n, i + 1); return (ms.tot[b2] - ms.tot[a2]) / ((b2 - a2) / n * Lm); });
+      const q = (R.sh || {})[dir], VRc = q ? q.VRdc / 1e3 : 0, VRs = q && q.VRds ? q.VRds / 1e3 : 0;
+      const vm = Math.max(...V.map(Math.abs), 1), showRc = VRc > 0 && VRc <= 4 * vm, sc = (W - cx - 40) / Math.max(vm, showRc ? VRc : 0) * 0.85, X = v => Math.max(4, Math.min(W - 4, cx + v * sc));
+      if (VRc > 0 && !showRc) s += tx(W - 6, 44, `V_Rd,c = ${fmt(VRc, 0)} kN (poza skalą)`, { fs: 9, a: 'end', c: C.ok });
+      const pts = V.map((v, i) => `${X(Math.abs(v)).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ');
+      s += `<polygon points="${cx},${Y(0)} ${pts} ${cx},${Y(1)}" fill="${C.red}" fill-opacity="0.12"/><polyline points="${pts}" fill="none" stroke="${C.red}" stroke-width="1.5"/>`;
+      if (showRc) s += `<line x1="${X(VRc)}" y1="${Y(1)}" x2="${X(VRc)}" y2="${Y(0)}" stroke="${C.ok}" stroke-width="1.3" stroke-dasharray="6 3"/>` + tx(X(VRc) - 3, Y(1) + 12, `V_Rd,c = ${fmt(VRc, 0)}`, { fs: 9, c: C.ok, a: 'end' });
+      const iV = V.reduce((a2, v, i) => (Math.abs(v) > Math.abs(V[a2]) ? i : a2), 0); s += `<circle cx="${X(Math.abs(V[iV]))}" cy="${Y(iV / n)}" r="2.6" fill="${C.red}"/>` + tx(X(Math.abs(V[iV])) + 4, Y(iV / n) - 4, fmt(Math.abs(V[iV]), 1), { fs: 9.5, c: C.red, a: 'start', w: 600 });
+      const T = R.ties;
+      if (T && R.lay.n) {
+        const zx = cx - cw / 2 - 30, band = (y0, y1, txt, k) => `<g class="stzone" data-tz="${k}"><title>Strzemiona ${txt} – kliknij, aby zmienić</title><rect x="${zx - 4}" y="${Y(y1 / g.L)}" width="22" height="${Math.max(4, Y(y0 / g.L) - Y(y1 / g.L))}" fill="${C.tie}" fill-opacity="${k === 'mid' ? 0.08 : 0.2}" stroke="${C.tie}" stroke-width="0.8"/></g>` + tx(zx - 7, (Y(y0 / g.L) + Y(y1 / g.L)) / 2 + 3, txt, { fs: 9, c: C.tie, a: 'end', w: 600 });
+        s += band(0, T.zBot, `⌀${R.lay.dt}/${T.sRed}`, 'bot');
+        if (g.L - T.zBot - T.zTop > 1) s += band(T.zBot, g.L - T.zTop, `⌀${R.lay.dt}/${T.s}`, 'mid');
+        if (T.zTop > 1) s += band(g.L - T.zTop, g.L, `⌀${R.lay.dt}/${T.sRed}`, 'top');
+      }
+      s += tx(8, H - 39, `V_Ed = dM_Ed/dx [kN]${q ? `; V_Ed,max = ${fmt(q.VEd / 1e3, 1)} kN` : ''}`, { fs: 9.5, a: 'start', c: C.ink2 }) + tx(8, H - 25, `z lewej – strzemiona w strefach (kliknij)${VRs ? `; V_Rd,s = ${fmt(VRs, 0)} kN` : ''}`, { fs: 9, a: 'start', c: C.mut });
+    } else if (mode === 'R') {
+      // reakcje podpór (siły na fundament i strop) – wartości obliczeniowe kombinacji, z imperfekcją i II rzędem
+      const ms = D.momentSeries(R, oc, dir), n = ms.tot.length - 1, Lm = g.L / 1000;
+      const Vat = i => { const a2 = Math.max(0, i - 1), b2 = Math.min(n, i + 1); return (ms.tot[b2] - ms.tot[a2]) / ((b2 - a2) / n * Lm); };
+      const fixB = ['cant', 'fp', 'ff', 'ffs'].includes(sch), supT = sch !== 'cant', fixT = sch === 'ff' || sch === 'ffs';
+      const arrH = (y, v, lab) => { const sg = v >= 0 ? -1 : 1, xa = cx + sg * (cw / 2 + 2); return `<g stroke="${C.ok}" fill="${C.ok}"><line x1="${xa + sg * 30}" y1="${y}" x2="${xa}" y2="${y}" stroke-width="1.7"/><path d="M${xa},${y} l${sg * 8},-4 v8z"/></g>` + tx(xa + sg * 33, y + 3.5, lab, { fs: 9.5, c: C.ok, a: sg > 0 ? 'start' : 'end', w: 600 }); };
+      const arcM = (y, v, lab, up) => `<path d="M${cx + cw / 2 + 8},${y + (up ? 12 : -12)} a14,14 0 0,${v >= 0 ? 1 : 0} 0,${up ? -24 : 24}" fill="none" stroke="${C.ok}" stroke-width="1.5"/>` + tx(cx + cw / 2 + 26, y + (up ? -8 : 14), lab, { fs: 9.5, c: C.ok, a: 'start', w: 600 });
+      const N0 = fr.Nbot / 1e3, Vb = Vat(0), Vt = Vat(n), Mb = ms.tot[0], Mt = ms.tot[n];
+      s += `<g stroke="${C.ok}" fill="${C.ok}"><line x1="${cx + cw / 2 + 40}" y1="${Y(0) + 26}" x2="${cx + cw / 2 + 40}" y2="${Y(0) + 4}" stroke-width="1.8"/><path d="M${cx + cw / 2 + 36},${Y(0) + 12} l4,-8 l4,8z"/></g>` + tx(cx + cw / 2 + 46, Y(0) + 20, `R_N = ${fmt(N0, 0)} kN`, { fs: 9.5, c: C.ok, a: 'start', w: 600 });
+      s += arrH(Y(0) - 6, Vb, `H = ${fmt(Math.abs(Vb), 1)} kN`);
+      if (fixB || Math.abs(Mb) > 0.05) s += arcM(Y(0) - 26, Mb, `M = ${fmt(Math.abs(Mb), 1)} kNm`, true);
+      if (supT) s += arrH(Y(1) + 8, -Vt, `H = ${fmt(Math.abs(Vt), 1)} kN`);
+      if (supT && (fixT || Math.abs(Mt) > 0.05)) s += arcM(Y(1) + 30, Mt, `M = ${fmt(Math.abs(Mt), 1)} kNm`, false);
+      s += tx(8, H - 39, 'Reakcje (obliczeniowe, z e_i i II rzędem)', { fs: 9.5, a: 'start', c: C.ink2 }) + tx(8, H - 25, 'tabela reakcji od obciążeń – pod schematem', { fs: 9, a: 'start', c: C.mut });
     } else if (mode === 'buck') {
       // postać wyboczenia i długość wyboczeniowa
       const n = 40, amp = 22; let p = '';
       for (let i = 0; i <= n; i++) { const xi = i / n; let v = sch === 'cant' ? 1 - Math.cos(Math.PI * xi / 2) : sch === 'ffs' ? (1 - Math.cos(Math.PI * xi)) / 2 : window.EC2.m2Shape(sch, true, xi); p += `${(cx - cw / 2 - 8 - v * amp).toFixed(1)},${Y(xi).toFixed(1)} `; }
       s += `<polyline points="${p}" fill="none" stroke="${C.warn}" stroke-width="1.4" stroke-dasharray="6 3"/>`;
-      s += tx(8, H - 27, `postać wyboczenia (poglądowo), β = ${fmt(B.beta, 2)}`, { fs: 9.5, a: 'start', c: C.ink2 });
+      s += tx(8, H - 25, `postać wyboczenia (poglądowo), β = ${fmt(B.beta, 2)}`, { fs: 9.5, a: 'start', c: C.ink2 });
     }
-    s += tx(8, H - 12, `${(oc.c.name || '').slice(0, 52)}`, { fs: 9, a: 'start', c: C.mut });
+    s += tx(8, H - 9, `${(oc.c.name || '').slice(0, 52)}`, { fs: 9, a: 'start', c: C.mut });
   }
   // wymiary
   s += dimV(cx - cw / 2 - 46, Y(1), Y(0), `L = ${fmt(g.L / 1000, 2)} m`, { fs: 10 });
@@ -313,7 +409,10 @@ D.heightChart = function (o) {
   let vmin = Math.min(...all), vmax = Math.max(...all); if (vmax - vmin < 1e-9) { vmax += 1; vmin -= 1; }
   const pad = (vmax - vmin) * 0.12; vmin -= pad; vmax += pad;
   const X = v => ml + (v - vmin) / (vmax - vmin) * (W - ml - mr), Y = xi => mt + (1 - xi) * (H - mt - mb);
-  let s = svgOpen(W, H, 'class="hchart"');
+  // dane wykresu do kursora (wartości w miejscu kursora) i znaczników (kliknięcie) – wspólne dla wykresów zakładki
+  const cid = 'h' + (++D.chSeq);
+  D.CH[cid] = { W, H, ml, mr, mt, mb, vmin, vmax, L: (o.L || 1000) / 1000, unit: o.cu || '', dp: o.dp !== undefined ? o.dp : 1, title: o.title || '', key: o.key || '', series: o.series.map(se => ({ v: Array.from(se.v), c: se.c, l: se.l || o.sl || '' })) };
+  let s = svgOpen(W, H, `class="hchart" data-cid="${cid}"`);
   s += tx(6, 14, o.title || '', { fs: 11.5, w: 650, a: 'start' });
   niceTicks(vmin, vmax, 5).forEach(t => { s += `<line x1="${X(t)}" y1="${mt}" x2="${X(t)}" y2="${H - mb}" stroke="${C.grid}"/>` + tx(X(t), H - mb + 13, fmt(t, Math.abs(vmax - vmin) < 10 ? 1 : 0), { fs: 9.5, c: C.mut }); });
   const L = (o.L || 1000) / 1000;
@@ -329,8 +428,12 @@ D.heightChart = function (o) {
   (o.marks || []).forEach(mk => { s += `<circle cx="${X(mk.v)}" cy="${Y(mk.xi)}" r="2.8" fill="${mk.c}"/>` + tx(X(mk.v) + (mk.v >= 0 ? 5 : -5), Y(mk.xi) + (mk.xi > 0.9 ? 12 : mk.xi < 0.1 ? -4 : 4), mk.l, { fs: 9.5, c: mk.c, a: mk.v >= 0 ? 'start' : 'end', w: 600 }); });
   let lx = 6; const ly = 28;
   o.series.filter(se => se.l).forEach(se => { s += `<line x1="${lx}" y1="${ly}" x2="${lx + 14}" y2="${ly}" stroke="${se.c}" stroke-width="2" ${se.dash ? `stroke-dasharray="${se.dash}"` : ''}/>` + tx(lx + 17, ly + 3.5, se.l, { fs: 9, a: 'start', c: C.ink2 }); lx += se.l.length * 5.2 + 30; });
+  s += `<g class="pins"></g><g class="cur" style="display:none;pointer-events:none"><line class="curl" x1="${ml}" x2="${W - mr}" y1="0" y2="0" stroke="#1d5bb8" stroke-width="1" stroke-dasharray="3 2"/><g class="curd"></g><rect class="curbg" x="0" y="0" width="10" height="10" rx="3" fill="#ffffff" fill-opacity="0.93" stroke="#c9ced6"/><text class="curtx" x="0" y="0" font-size="10" fill="#1b2230"></text></g>`;
   return s + '</svg>';
 };
+D.CH = {}; D.chSeq = 0; D.ss = ss;
+// wartość serii wykresu wysokościowego na wysokości x [m] (interpolacja liniowa)
+D.hAt = (c, se, xm) => { const v = se.v, n = v.length - 1, t = Math.max(0, Math.min(1, xm / c.L)) * n, i = Math.min(n - 1, Math.floor(t)), f = t - i; return v[i] + (v[i + 1] - v[i]) * f; };
 // rozkłady momentów kombinacji w kierunku: M0, M0 + e_i·N, M_Ed (z II rzędem)
 D.momentSeries = function (R, oc, dir) {
   const r = oc[dir], fr = oc.fr, B = R.buck[dir], E = window.EC2;
@@ -356,7 +459,7 @@ D.elevationSVG = function (R, S, o) {
   const kx = wcol / depth;
   const cx = 210;
   const Y = z => H - mb - (z - zBot) * k, X = x => cx - wcol / 2 + x * kx;
-  let s = svgOpen(W, H, 'class="elevsvg"');
+  let s = svgOpen(W, H, `class="elevsvg" data-zb="${zBot}" data-zt="${zTop}" data-k="${k}" data-hh="${H}" data-mb="${mb}" data-x0="${X(0)}" data-x1="${X(depth)}" data-l="${L}"`);
   // fundament / słup niższy
   if (found) { const fw = wcol + 160; s += `<rect x="${cx - fw / 2}" y="${Y(0)}" width="${fw}" height="${Y(zBot) - Y(0)}" fill="${C.conc}" stroke="${C.concL}"/>` + tx(cx + fw / 2 - 4, Y(zBot) - 6, `fundament h_F = ${det.hF}`, { fs: 9.5, a: 'end', c: C.mut }); }
   else { s += `<rect x="${X(0)}" y="${Y(0)}" width="${wcol}" height="${Y(zBot) - Y(0)}" fill="${C.conc}" stroke="${C.concL}" stroke-dasharray="5 3"/>` + `<rect x="${cx - wcol / 2 - 70}" y="${Y(0) - 0}" width="${wcol + 140}" height="${Math.max(6, 200 * k)}" fill="${C.conc}" stroke="${C.concL}" transform="translate(0,${-Math.max(6, 200 * k)})" opacity="0"/>` + tx(cx, Y(zBot) - 4, 'słup kondygnacji niższej', { fs: 9.5, c: C.mut }); }
@@ -385,13 +488,16 @@ D.elevationSVG = function (R, S, o) {
   const xl = cx - wcol / 2 - 70;
   s += dimV(xl, Y(L), Y(0), `L = ${fmt(L, 0)}`);
   s += dimV(xl, Y(L + hTop), Y(L), `${hTop}`, { fs: 9.5 });
-  s += dimV(xl - 26, Y(A.l0), Y(0), `l₀ = ${fmt(A.l0, 0)}`, { fs: 9.5 });
-  if (cont) s += dimV(xl - 26, Y(zTop), Y(L + hTop), `l₀ = ${fmt(A.l0, 0)}`, { fs: 9.5 });
+  const lapG = (a, b) => `<g class="lapdim" style="cursor:pointer"><title>Długość zakładu prętów l₀ = ${fmt(A.l0, 0)} mm${A.l0man ? ' (zadana ręcznie)' : ''} – kliknij, aby zmienić</title><rect x="${xl - 40}" y="${Y(b)}" width="26" height="${Y(a) - Y(b)}" fill="transparent"/>` + dimV(xl - 26, Y(b), Y(a), `l₀ = ${fmt(A.l0, 0)}${A.l0man ? '*' : ''}`, { fs: 9.5, c: A.l0man ? C.acc : undefined }) + '</g>';
+  s += lapG(0, A.l0);
+  if (cont) s += lapG(L + hTop, zTop);
   if (found) s += dimV(xl, Y(0), Y(-(det.hF - det.cF - 20)), `${fmt(det.hF - det.cF - 20, 0)}`, { fs: 9.5 });
   // strefy strzemion – prawa strona
   const xr = cx + wcol / 2 + 18;
   const zones = [[50, T.zBot, T.sRed], [T.zBot, L - T.zTop, T.s], [L - T.zTop, L - 50, T.sRed]].filter(q => q[1] - q[0] > 1);
-  zones.forEach(([a, b, sp]) => { const n = Math.round((b - a) / sp); s += dimV(xr, Y(b), Y(a), '', {}) + tx(xr + 6, (Y(a) + Y(b)) / 2 + 3.5, `${fmt(b - a, 0)}: ⌀${lay.dt} co ${fmt(sp, 0)}`, { fs: 9.5, a: 'start', c: sp < T.s ? C.tie : C.dim }); });
+  const zk = ['bot', 'mid', 'top'];
+  [[50, T.zBot, T.sRed, 'bot'], [T.zBot, L - T.zTop, T.s, 'mid'], [L - T.zTop, L - 50, T.sRed, 'top']].filter(q => q[1] - q[0] > 1).forEach(([a, b, sp, kz]) => { s += `<g class="stzone" data-tz="${kz}" style="cursor:pointer"><title>Strefa strzemion: ${fmt(b - a, 0)} mm, ⌀${lay.dt} co ${fmt(sp, 0)} mm – kliknij, aby zmienić rozstaw lub długość strefy</title><rect x="${xr - 6}" y="${Y(b)}" width="150" height="${Math.max(6, Y(a) - Y(b))}" fill="transparent"/>` + dimV(xr, Y(b), Y(a), '', {}) + tx(xr + 6, (Y(a) + Y(b)) / 2 + 3.5, `${fmt(b - a, 0)}: ⌀${lay.dt} co ${fmt(sp, 0)}`, { fs: 9.5, a: 'start', c: sp < T.s ? C.tie : C.dim }) + '</g>'; });
+  void zk;
   // odnośniki pozycji
   const lab = (n, txt, x, y, xt) => `<line x1="${x}" y1="${y}" x2="${xt}" y2="${y}" stroke="${C.ink2}" stroke-width="0.8"/><circle cx="${xt + 9}" cy="${y}" r="8" fill="#ffffff" stroke="${C.ink}"/>` + tx(xt + 9, y + 3.5, String(n), { fs: 9.5, w: 700 }) + tx(xt + 21, y + 3.5, txt, { fs: 9.5, a: 'start' });
   const xLab = W - 190;
@@ -415,6 +521,7 @@ D.extractsSVG = function (R, S, o) {
   let s = svgOpen(W, H, 'class="extsvg"');
   sch.rows.forEach((r, i) => {
     const y = 20 + i * rowH + 30, x0 = 120, x1 = W - 170;
+    s += `<g data-pos="${r.pos}" data-kind="${r.kind}" class="xrow"><title>${esc(r.name)} – kliknij, aby zmienić</title><rect x="2" y="${y - 30}" width="${W - 4}" height="${rowH - 2}" fill="transparent"/></g>`;
     s += `<circle cx="20" cy="${y - 6}" r="9" fill="#ffffff" stroke="${C.ink}"/>` + tx(20, y - 2.5, String(r.pos), { fs: 10, w: 700 }) + tx(34, y - 2, `${r.n}×⌀${r.d}`, { fs: 10.5, w: 650, a: 'start' }) + tx(34, y + 11, r.name.slice(0, 18), { fs: 8.5, a: 'start', c: C.mut });
     const col = r.kind === 'tie' || r.kind === 'pin' ? C.tie : r.kind === 'start' ? C.acc : C.bar;
     if (r.shape === 'I') s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="${col}" stroke-width="2.4"/>` + tx((x0 + x1) / 2, y - 6, fmt(r.straight, 0), { fs: 10 });

@@ -46,5 +46,49 @@ function find(ref) {
   if (/tab\. 4\./.test(r) && !out.includes('4.4.1')) out.push('4.4.1');
   return out.length ? out : keys.filter(k => r.includes(k)).slice(0, 1);
 }
-window.SZN = { N, find, label: LBL };
+// odnośniki w tekście (tablice, rysunki, wzory, punkty) → klucze objaśnień
+const TAB = { '4.1': '4.4.1', '4.2': '4.4.1', '4.3N': '4.4.1', '4.4N': '4.4.1', '4.5N': '4.4.1', 'E.1N': 'E', '7.1N': '7.3', '3.1': '3.1.6', '8.2': '8.4', '8.3': '8.7' };
+const RYS = { '5.7': '5.8.3.2', '5.8': '5.8.9', '3.3': '3.1.7', '3.5': '3.1.7', '3.8': '3.2.7', '6.1': '6.1', '6.5': '6.2.3', '8.7': '8.7', '8.8': '8.7', '9.10': '9.5.3' };
+const EQ = { '3.15': '3.1.6', '3.17': '3.1.7', '3.18': '3.1.7', '5.1': '5.2', '5.2': '5.2', '5.13N': '5.8.3.1', '5.14': '5.8.3.1', '5.15': '5.8.3.2', '5.16': '5.8.3.2', '5.17': '5.8.3.2', '5.19': '5.8.4', '5.21': '5.8.7', '5.22': '5.8.7', '5.26': '5.8.7', '5.28': '5.8.7.3', '5.30': '5.8.7.3', '5.31': '5.8.8', '5.32': '5.8.8', '5.33': '5.8.8', '5.34': '5.8.8', '5.36': '5.8.8', '5.37': '5.8.8', '5.38a': '5.8.9', '5.38b': '5.8.9', '5.39': '5.8.9', '6.2a': '6.2.2', '6.2b': '6.2.2', '6.8': '6.2.3', '6.9': '6.2.3', '6.11N': '6.2.3', '7.8': '7.3', '7.9': '7.3', '7.11': '7.3', '8.3': '8.4', '8.4': '8.4', '8.10': '8.7', '9.12N': '9.5.2' };
+const EQ1990 = /^6\.1[0-6][ab]?$/;
+function clause(tok) {
+  const p = tok.split('.');
+  for (let n = p.length; n >= 2; n--) { const k = p.slice(0, n).join('.'); if (N[k]) return [k]; }
+  return Object.keys(N).filter(k => k.startsWith(tok + '.') && k.split('.').length === p.length + 1).slice(0, 3);
+}
+function resolve(kind, tok, ctx) {
+  ctx = ctx || '';
+  if (/1992-1-2|odporno\S* ogniow|\bREI?\b|pożar/i.test(ctx) && (kind === 'tab' || kind === 'eq' || /^5\./.test(tok))) return N.fire ? ['fire'] : [];
+  if (/1990/.test(ctx) && /^6\./.test(tok)) return ['1990'];
+  if (/EN\s*(?:199[013-9]|1992-1-[2-9]|206)\b/.test(ctx)) return [];
+  if (kind === 'zal') return N[tok] ? [tok] : [];
+  if (kind === 'tab') return TAB[tok] && N[TAB[tok]] ? [TAB[tok]] : [];
+  if (kind === 'rys') return RYS[tok] && N[RYS[tok]] ? [RYS[tok]] : [];
+  if (kind === 'eq') { if (EQ1990.test(tok)) return ['1990']; return EQ[tok] && N[EQ[tok]] ? [EQ[tok]] : []; }
+  if (!/^[\d.]+$/.test(tok)) return [];
+  const cl = clause(tok);
+  return cl.length || tok.split('.').length !== 2 ? cl : (EQ[tok] && N[EQ[tok]] ? [EQ[tok]] : []);
+}
+// klasy ekspozycji – przykłady elementów (orientacyjnie, por. tab. 4.1 i PN-EN 206)
+const EXP = {
+  X0: 'beton niezbrojony lub elementy wewnątrz budynków o bardzo niskiej wilgotności (rzadko dla zbrojonych)',
+  XC1: 'słupy wewnątrz budynków o niskiej wilgotności (mieszkania, biura, szkoły); elementy stale zanurzone w wodzie',
+  XC2: 'słupy fundamentowe i elementy w gruncie, powierzchnie długotrwale mokre; zbiorniki na wodę',
+  XC3: 'słupy wewnątrz o umiarkowanej lub dużej wilgotności (hale, garaże zamknięte, kuchnie zbiorowe); słupy na zewnątrz osłonięte od deszczu',
+  XC4: 'słupy zewnętrzne narażone na deszcz (cyklicznie mokre i suche): wiaty, estakady, elewacje',
+  XD1: 'słupy w strefie oddziaływania mgły solnej z dróg (np. przy jezdniach), garaże z dostępem pojazdów – umiarkowana wilgotność',
+  XD2: 'słupy w basenach, elementy narażone na wody przemysłowe zawierające chlorki',
+  XD3: 'słupy parkingów wielopoziomowych, podpory mostów w strefie rozbryzgu soli odladzających',
+  XS1: 'konstrukcje przybrzeżne narażone na powietrze zawierające sól morską',
+  XS2: 'części konstrukcji morskich stale zanurzone',
+  XS3: 'części konstrukcji morskich w strefie pływów, rozbryzgów i aerozolu',
+  XF1: 'pionowe powierzchnie zewnętrzne narażone na deszcz i mróz (słupy zewnętrzne)',
+  XF2: 'pionowe powierzchnie konstrukcji drogowych narażone na mróz i aerozol środków odladzających',
+  XF3: 'poziome powierzchnie narażone na deszcz i mróz (rzadko dla słupów)',
+  XF4: 'elementy drogowe i mostowe narażone na środki odladzające i mróz; strefa rozbryzgu wody morskiej',
+  XA1: 'środowisko chemiczne słabo agresywne (grunt, woda gruntowa wg PN-EN 206, tab. 2)',
+  XA2: 'środowisko chemiczne średnio agresywne; elementy w kontakcie z wodą morską; grunty agresywne',
+  XA3: 'środowisko chemiczne silnie agresywne (zakłady przemysłowe, oczyszczalnie)',
+};
+window.SZN = { N, find, label: LBL, resolve, EXP };
 })();

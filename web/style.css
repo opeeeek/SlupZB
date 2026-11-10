@@ -730,3 +730,18 @@ tr.selr td { background: var(--acc2) !important; }
 .xychart circle[data-ci]:hover { r: 5; }
 @media print { .xychart circle[data-ci] { cursor: default; } }
 .schemesvg polyline, .schemesvg polygon, .schemesvg text, .schemesvg circle { pointer-events: none; }
+/* SłupŻB 1.2 – strefy kliknięcia przekroju, wykresy z kursorem */
+.secsvg.secedit .covz:hover { fill: var(--acc); fill-opacity: .10; stroke: none; }
+.secsvg.secedit circle.covz:hover, .secsvg.secedit path.covz[style]:hover, .secsvg.secedit .ringz:hover, .secsvg.secedit circle.inz[style]:hover { fill: none; stroke: var(--acc); stroke-opacity: .16; stroke-dasharray: none; }
+.secsvg.secedit .facez:hover, .secsvg.secedit .cornz:hover { fill: var(--acc); fill-opacity: .16; stroke: var(--acc); stroke-dasharray: 3 2; stroke-width: 1; }
+.secsvg.secedit .inz:hover { fill: var(--acc); fill-opacity: .06; stroke: var(--acc); stroke-dasharray: 4 3; }
+.secsvg .barhit { cursor: pointer; }
+.secsvg .barhit:hover { stroke: var(--acc); stroke-width: 1.4; }
+.secsvg .barhit.on { stroke: #c0262d; stroke-width: 2.4; fill: rgba(192, 38, 45, 0.16); }
+svg .ringz.zfail, svg circle.covz.zfail, svg path.covz[style].zfail { fill: none !important; stroke: var(--fail) !important; stroke-opacity: .35; stroke-dasharray: none !important; animation: zfk 1.4s ease-in-out infinite; }
+table.reqt tr.xclick { cursor: pointer; }
+table.reqt tr.xclick:hover td { background: color-mix(in srgb, var(--acc) 7%, transparent); }
+table.areas td.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); font-weight: 600; }
+table.areas td, table.areas th { text-align: right; padding: 3px 7px; }
+svg.hchart .pinlab:hover rect { fill: #fff6e5; }
+.rebbar .ttl { font-size: 12.5px; color: var(--ink2); }

@@ -51,9 +51,7 @@ function partData(R, S, h, full) {
   ['y', 'z'].forEach(d => { const B = R.buck[d]; o += line(`Płaszczyzna ${PLN(d)} (zginanie M<sub>${d}</sub>): ${esc(B.schName)}`); });
   o += line(`Beton ${esc(S.mat.concrete)}, stal podłużna ${esc(m.st.name)}, strzemiona ${esc(m.sw.name)}; kruszywo d<sub>g</sub> = ${S.mat.dg} mm`);
   o += line(`Klasa ekspozycji: ${cov.exps.join(', ')}; projektowy okres użytkowania ${S.env.life} lat`);
-  const rebT = g.circ ? `${lay.n}⌀${lay.dmax} równomiernie na obwodzie` : g.ring ? `${S.reb.nc}⌀${lay.dmax} na obwodzie zewnętrznym${S.reb.nci ? ` i ${S.reb.nci}⌀${lay.dmax} na obwodzie wewnętrznym` : ''}`
-    : g.isPoly ? `${lay.n} prętów: ⌀${S.reb.dc} w narożach i przecięciach obrysów strzemion (${lay.bars.filter(q => q.corner).length} szt.)${lay.n > lay.bars.filter(q => q.corner).length ? `, pośrednie ⌀${S.reb.dm} na ścianach co ≤ ${S.reb.sMax} mm` : ''}`
-    : `${lay.n} prętów: narożne 4⌀${S.reb.dc}${lay.n > 4 ? `, pośrednie ⌀${S.reb.dm} (wzdłuż b: ${S.reb.nb} szt., wzdłuż h: ${S.reb.nh} szt. – z narożnymi)` : ''}`;
+  const rebT = E.rebText(R);
   if (lay.n) o += line(`Zbrojenie podłużne: ${rebT}; A<sub>s</sub> = ${f(lay.As, 0)} mm², ρ = ${f(lay.As / g.Ac * 100, 2)}%`);
   else o += line('<b>Zbrojenie podłużne nie zostało zadane</b> – sprawdzenia nośności dotyczą przekroju niezbrojonego.');
   if (lay.n) o += line(`Strzemiona ⌀${lay.dt}, rozstaw s = ${R.ties.s} mm, przy stropach i w strefie zakładu s = ${R.ties.sRed} mm${lay.pins.length ? `; szpilki: ${lay.pins.length} w przekroju` : ''}`);

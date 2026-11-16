@@ -1,4 +1,4 @@
-# SłupŻB 1.2 – obliczenia słupów żelbetowych wg PN-EN 1992-1-1
+# SłupŻB 1.3 – obliczenia słupów żelbetowych wg PN-EN 1992-1-1
 
 Program analogiczny do BelkaŻB (ten sam układ, wygląd i sposób pracy), przeznaczony do wymiarowania i sprawdzania słupów żelbetowych.
 
@@ -6,6 +6,23 @@ Trzy postacie tej samej aplikacji (wspólny kod z katalogu `web/`):
 - `SlupZB.exe` – program dla Windows 10/11 (jeden plik, bez instalacji, WebView2); projekty `*.slup`, autozapis w `%LOCALAPPDATA%\SlupZB`,
 - `app/app.html` – plik do otwarcia w dowolnej przeglądarce (offline),
 - `webapp/slupzb.html` – wersja do publikacji jako strona claude.ai (artefakt): „Moje projekty” na koncie, pobieranie projektu i raportu.
+
+## Poprawki 1.3 – dalsze funkcje z BelkaŻB (do wersji 2.10.2)
+
+- **Słup wielokondygnacyjny z różnymi przekrojami** – pole „słup wielokondygnacyjny” nad schematem: zakładki to kondygnacje (K1 – najniższa), „+” dodaje kondygnację na górze (kopia najwyższej). Każda kondygnacja ma własną wysokość, przekrój, zbrojenie, podparcie i obciążenia stropu; w głowicy dostaje siły N wszystkich obciążeń kondygnacji wyżej (jako osobne przypadki do kombinacji – łączone wg nazwy i rodzaju) oraz ciężar słupów wyżej. Widok całego słupa i zestawienie kondygnacji (przekrój, zbrojenie, N z góry, N<sub>Ed,max</sub>, η) – klik przenosi do kondygnacji. Dół kondygnacji wyżej – zakład nad stropem, góra niższej – pręty na zakład.
+- **Siły na dowolnej wysokości słupa**: siła pionowa ściskająca **mimośrodowa** na wysokości z (np. belka na wsporniku – moment skupiony N·e, N poniżej rośnie) i siła pozioma H na wysokości z; rozkład M i V dla każdego schematu podparcia (pręt MES, sprawdzony z rozwiązaniami analitycznymi). W oknie obciążenia pola „wysokość przyłożenia”.
+- **Kliknięcie słupa na schemacie w Danych** – okno dodania obciążenia w tym miejscu: siła pionowa mimośrodowa (w głowicy lub na wysokości kliknięcia), siła pozioma, obciążenie poziome na całej wysokości, moment końcowy; rodzaj obciążenia. Podpory – warunki podparcia.
+- **Schemat w Danych jak w BelkaŻB 2.10**: przyciski nad schematem **Obciążenia** (lista z polami uwzględnij / pomiń), **Przekrój** (okno przekroju z klikalnymi strefami i doborem), **Podparcie**, **Wymiary** (pokaż / ukryj); **legenda z polami obciążeń** (ciężar własny wyłączony zostaje wyszarzony „pominięty” – można go od razu włączyć); **menu pod prawym przyciskiem** (dodaj obciążenie tu, obciążenia, przekrój, podparcie, przekrój i siły na tej wysokości, wymiary); przełącznik wykresu pod schematem; na słupie – klasa betonu i przekrój × wysokość.
+- **Wykres M w Danych – tylko zbrojenie wymagane** (n⌀ z doboru, kliknięcie – wybór średnicy) i jego nośność M<sub>Rd</sub>; bez zbrojenia przyjętego.
+- **Widok wyboczenia z wartościami**: e<sub>i</sub>, e<sub>2</sub> i e<sub>i</sub> + e<sub>2</sub> w miejscu największego ugięcia, l₀ (β), λ / λ<sub>lim</sub>, N<sub>B</sub>.
+- **Bok przekroju – okno z zakładkami**: zbrojenie boku, **otulina boku** (auto lub zadana – np. większa na ścianie zewnętrznej; sprawdzana z wymaganą), **wymiar** (b lub h), **obciążenie na boku** (siła pionowa na krawędzi boku – mimośród w stronę boku, parcie q i siła H na bok). Pas otuliny każdego boku klikalny osobno; silnik, rysunki i DXF z otuliną zależną od boku.
+- **Zbrojenie słupa – rysunek**: odnośniki pozycji z **półką poziomą i ukośną strzałką** trafiającą dokładnie w pręt, pręt startowy i strzemię (opisy w rzędach, bez nakładania); kliknięcie **fundamentu** – wysokość, szerokość, otulina dolna, zagłębienie i stopka prętów startowych; kliknięcie **stropu / belki** – grubość, szerokość, zakończenie prętów (zakład / odgięcie, długość odgięcia); kliknięcie końca pręta – zakład lub odgięcie; **uchwyty granic stref zagęszczenia strzemion** (przeciąganie co 50 mm); opisy stref pionowo przy linii wymiarowej.
+- **Strefy zagęszczenia strzemion – automatycznie albo ręcznie**: rozstaw w strefach i długości stref także w Danych (Zbrojenie – strzemiona), w oknie „Strefy strzemion”, z wykresu V (klik strefy) i przeciąganiem na rysunku; kontrola z 9.5.3(4).
+- **Klasa betonu „Auto”** (minimalna dla ekspozycji, podnoszona w doborze tylko gdy przy niższej nie da się spełnić warunków), **blokada klasy**, **tabela parametrów klas betonu** (tab. 3.1 – klik przyjmuje klasę); **kruszywo „Auto”** – największa frakcja 8 / 16 / 22 / 32 mm dopuszczona prześwitem prętów (8.2(2)).
+- **„Dobierz zbrojenie” – gdy nie da się spełnić warunków**: okno z listą niespełnionych warunków i przyczyną, „Dobierz wszystko” albo „Przyjmij najlepsze zbrojenie mimo to”.
+- **„Wyczyść zbrojenie”** zeruje też ustawienia strzemion, zakładów i zakończeń prętów (automatycznie).
+- **Średnice gięcia wg tab. 8.1N** (4⌀ dla ⌀ ≤ 16, 7⌀ dla ⌀ > 16; strzemiona 4⌀) – łuki i opisy φ<sub>m</sub> na wyciągach.
+- Raport: siły na wysokości, obciążenia z kondygnacji wyżej, otulina boków, kruszywo i klasa betonu „Auto”.
 
 ## Poprawki 1.2 – funkcje przeniesione z BelkaŻB
 

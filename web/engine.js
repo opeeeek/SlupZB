@@ -157,7 +157,7 @@ function defaultState() {
       z: { sch: 'pp', mode: 'auto', beta: 1.0, l0: '', k1: 0.1, k2: 0.1 },
     },
     mat: { concrete: 'C30/37', steel: 'B500SPn', steelW: 'B500A', dg: 16, diag: 'parab' },
-    env: { exp: 'XC1', expF: '-', expA: '-', life: 50, scSel: 'auto', qc: false, scRed: false, dcdev: 10, dcg: 0, dcst: 0, dcadd: 0, cnomSel: 'auto', cnomVal: 30 },
+    env: { exp: 'XC1', expF: '-', expA: '-', life: 50, scSel: 'auto', qc: false, scRed: false, dcdev: 10, dcg: 0, dcst: 0, dcadd: 0, cnomSel: 'auto', cnomVal: 30, cf: { top: 'auto', bot: 'auto', lft: 'auto', rgt: 'auto' } },
     loads: {
       mode: 'cases', sw: true, comb: '610ab', gG: 1.35, gGinf: 1.0, gQ: 1.5, xi: 0.85,
       items: [],
@@ -198,6 +198,7 @@ function normItem(it) {
   const o = newItem((it && it.kind) || 'imp', it);
   if (!(o.kind === 'perm' || VAR_KINDS[o.kind])) o.kind = 'imp';
   ITEM_NUM.forEach(k => o[k] = num(o[k], 0));
+  o.zN = optNum(o.zN); o.zH = optNum(o.zH);                  // wysokość przyłożenia siły pionowej / poziomej [m] od podstawy ('' – głowica)
   o.name = String(o.name || ''); o.pm = !!o.pm; o.off = !!o.off;
   if (!PSI[o.cat] || ['S', 'SH', 'W', 'T'].includes(o.cat)) o.cat = 'B';
   return o;
@@ -234,7 +235,13 @@ function normalize(S0) {
   if (!STEEL[S.mat.steel]) S.mat.steel = 'B500SPn';
   if (!STEEL[S.mat.steelW]) S.mat.steelW = 'B500A';
   S.mat.dg = num(S.mat.dg, 16); S.mat.diag = S.mat.diag === 'rect' ? 'rect' : 'parab';
+  // klasa betonu „Auto” (jak BelkaŻB 2.10.0): minimalna dla ekspozycji, wyższa – gdy wymaga jej dobór (cDes); blokada klasy (lockC)
+  S.mat.autoC = S.mat.autoC === true; S.mat.lockC = S.mat.lockC === true && !S.mat.autoC; S.mat.cDes = CONCRETE[S.mat.cDes] ? S.mat.cDes : '';
+  if (S.mat.autoC) { let c = minClsOf(S); if (S.mat.cDes && classIdx(S.mat.cDes) > classIdx(c)) c = S.mat.cDes; S.mat.concrete = c; }
+  // kruszywo „Auto”: największa frakcja dopuszczona prześwitem prętów (8.2(2)); rozmieszczenie prętów – dla d_g = 8 mm
+  S.mat.dgAuto = S.mat.dgAuto === true; if (S.mat.dgAuto) S.mat.dg = 8;
   ['life', 'dcdev', 'dcg', 'dcst', 'dcadd', 'cnomVal'].forEach(k => S.env[k] = num(S.env[k], D.env[k]));
+  { const cf0 = S.env.cf && typeof S.env.cf === 'object' ? S.env.cf : {}; S.env.cf = {}; ['top', 'bot', 'lft', 'rgt'].forEach(k => { const v = cf0[k]; S.env.cf[k] = v === undefined || v === null || v === '' || v === 'auto' || !isFinite(+v) ? 'auto' : Math.max(0, +v); }); }
   const Lo = S.loads;
   Lo.mode = Lo.mode === 'direct' ? 'direct' : 'cases';
   Lo.items = (Array.isArray(Lo.items) ? Lo.items : []).map(normItem);
@@ -275,6 +282,8 @@ function normalize(S0) {
   if (!['50', '100'].includes(String(dt.lap))) dt.lap = '100'; dt.lap = String(dt.lap);
   dt.sigma = dt.sigma === 'actual' ? 'actual' : 'fyd';
   dt.l0Man = (dt.l0Man === 'auto' || dt.l0Man === '' || dt.l0Man == null || !isFinite(+dt.l0Man)) ? 'auto' : Math.max(0, +dt.l0Man);
+  ['legTop', 'footF', 'inF', 'bF', 'bTop'].forEach(k => { dt[k] = (dt[k] === 'auto' || dt[k] === '' || dt[k] == null || !isFinite(+dt[k])) ? 'auto' : Math.max(0, +dt[k]); });
+  S.above = Array.isArray(S.above) ? S.above.filter(q => q && isFinite(+q.N)).map(q => ({ kind: q.kind === 'perm' || VAR_KINDS[q.kind] ? q.kind : 'perm', cat: q.cat || 'B', alt: q.alt || 'low', name: String(q.name || ''), N: +q.N, pm: !!q.pm, p0: q.p0, p1: q.p1, p2: q.p2, from: q.from || '' })) : [];
   const F = S.fire;
   if (!FIRE_COL[F.R]) F.R = '-';
   F.side = F.side === 'one' ? 'one' : 'more';
@@ -410,6 +419,8 @@ function geomCalc(S, R) {
 }
 
 /* ---------------------------------------------------------------- otulina */
+// minimalna klasa betonu dla klas ekspozycji (zał. E), nie niższa niż C20/25
+function minClsOf(S) { let c0 = 'C20/25'; [S.env.exp, S.env.expF, S.env.expA].filter(e => e && e !== '-').forEach(e => { const c = MIN_CLASS[e]; if (c && classIdx(c) > classIdx(c0)) c0 = c; }); return c0; }
 function coverCalc(S, m, dMain, dSw) {
   const env = S.env;
   const exp = EXP_COL[env.exp] !== undefined ? env.exp : 'XC1';
@@ -513,18 +524,20 @@ function layoutBars(S, g, cov, m) {
   } else {
     // przekrój prostokątny: 4 pręty narożne ⌀_c, na każdym boku n prętów pośrednich ⌀ (osobno dla boków górnego, dolnego, lewego i prawego)
     const dc = rb.dc, F = rectFaces(S);
-    const offC = c + dt + Math.max(dc / 2, rin - (rin - dc / 2) / Math.SQRT2), off = d => c + dt + d / 2;
-    lay.offC = offC; lay.rin = rin; lay.pf = !!rb.pf;
+    const cf = {}; FACES.forEach(k => { const v = S.env.cf ? S.env.cf[k] : 'auto'; cf[k] = v === 'auto' || v === undefined ? c : v; }); lay.cf = cf;
+    const rC = Math.max(dc / 2, rin - (rin - dc / 2) / Math.SQRT2), offC = Math.min(cf.top, cf.bot, cf.lft, cf.rgt) + dt + rC, off = d => Math.min(cf.top, cf.bot, cf.lft, cf.rgt) + dt + d / 2;
+    lay.offC = offC; lay.rin = rin; lay.pf = !!rb.pf; lay.rC = rC; lay.offCmax = Math.max(cf.top, cf.bot, cf.lft, cf.rgt) + dt + rC;
+    const cX0 = cf.lft + dt + rC, cX1 = g.b - cf.rgt - dt - rC, cY0 = cf.top + dt + rC, cY1 = g.h - cf.bot - dt - rC;
     const withM = FACES.filter(k => F[k].n > 0);
-    lay.offM = withM.length ? Math.min(...withM.map(k => off(F[k].d))) : offC;
+    lay.offM = withM.length ? Math.min(...withM.map(k => cf[k] + dt + F[k].d / 2)) : offC;
     const add = (x, y, d, corner, face, rest, side) => lay.bars.push({ x, y, d, A: area(d), corner, face, rest, side });
-    add(offC, offC, dc, true, 'c', true, 'c'); add(g.b - offC, offC, dc, true, 'c', true, 'c'); add(offC, g.h - offC, dc, true, 'c', true, 'c'); add(g.b - offC, g.h - offC, dc, true, 'c', true, 'c');
+    add(cX0, cY0, dc, true, 'c', true, 'c'); add(cX1, cY0, dc, true, 'c', true, 'c'); add(cX0, cY1, dc, true, 'c', true, 'c'); add(cX1, cY1, dc, true, 'c', true, 'c');
     const faceOf = k => {
-      const f = F[k], hz = k === 'top' || k === 'bot', L = hz ? g.b : g.h, n = f.n;
-      const pos = [offC]; for (let j = 1; j <= n; j++) pos.push(offC + j * (L - 2 * offC) / (n + 1)); pos.push(L - offC);
+      const f = F[k], hz = k === 'top' || k === 'bot', n = f.n, p0 = hz ? cX0 : cY0, p1 = hz ? cX1 : cY1;
+      const pos = [p0]; for (let j = 1; j <= n; j++) pos.push(p0 + j * (p1 - p0) / (n + 1)); pos.push(p1);
       const dia = pos.map((_, j) => (j === 0 || j === n + 1) ? dc : f.d);
       const rest = restrainFace(pos, dia, S.stir.pins);
-      const c0 = k === 'top' || k === 'lft' ? off(f.d) : (hz ? g.h : g.b) - off(f.d);
+      const c0 = k === 'top' ? cf.top + dt + f.d / 2 : k === 'lft' ? cf.lft + dt + f.d / 2 : k === 'bot' ? g.h - cf.bot - dt - f.d / 2 : g.b - cf.rgt - dt - f.d / 2;
       for (let j = 1; j <= n; j++) add(hz ? pos[j] : c0, hz ? c0 : pos[j], f.d, false, hz ? 'b' : 'h', rest[j], k);
       let clear = Infinity, ctc = 0, far = 0;
       for (let j = 0; j < pos.length - 1; j++) { clear = Math.min(clear, pos[j + 1] - pos[j] - (dia[j] + dia[j + 1]) / 2); ctc = Math.max(ctc, pos[j + 1] - pos[j]); }
@@ -544,10 +557,10 @@ function layoutBars(S, g, cov, m) {
     pinsOf(lay.faces.top, lay.faces.bot, 'h'); pinsOf(lay.faces.lft, lay.faces.rgt, 'b');
     lay.legs = { y: 2 + lay.pins.filter(p => p.dir === 'h').length, z: 2 + lay.pins.filter(p => p.dir === 'b').length };
     lay.restrained = lay.bars.filter(b => b.rest).length;
-    if (g.b - 2 * offC < 0 || g.h - 2 * offC < 0) lay.issues.push('pręty nie mieszczą się w przekroju');
+    if (cX1 - cX0 < 0 || cY1 - cY0 < 0) lay.issues.push('pręty nie mieszczą się w przekroju');
     // prześwit na buławę wibratora: największe pole między strzemieniem a szpilkami (8.2(4) – zagęszczenie betonu)
-    const cut = (L, ps) => { const u = [c + dt, ...ps.sort((a, b) => a - b), L - c - dt]; let mx = 0; for (let j = 0; j < u.length - 1; j++) mx = Math.max(mx, u[j + 1] - u[j]); return mx; };
-    lay.core = Math.min(cut(g.b, lay.pins.filter(p => p.dir === 'h').map(p => p.x)), cut(g.h, lay.pins.filter(p => p.dir === 'b').map(p => p.y))) - 2 * dt - Math.max(dc, ...withM.map(k => F[k].d));
+    const cut = (a0, a1, ps) => { const u = [a0, ...ps.sort((a, b) => a - b), a1]; let mx = 0; for (let j = 0; j < u.length - 1; j++) mx = Math.max(mx, u[j + 1] - u[j]); return mx; };
+    lay.core = Math.min(cut(cf.lft + dt, g.b - cf.rgt - dt, lay.pins.filter(p => p.dir === 'h').map(p => p.x)), cut(cf.top + dt, g.h - cf.bot - dt, lay.pins.filter(p => p.dir === 'b').map(p => p.y))) - 2 * dt - Math.max(dc, ...withM.map(k => F[k].d));
   }
   lay.As = lay.bars.reduce((a, b) => a + b.A, 0);
   lay.n = lay.bars.length;
@@ -555,7 +568,8 @@ function layoutBars(S, g, cov, m) {
   lay.cl = c + dt;                                   // otulina prętów podłużnych (do pręta)
   lay.a = c + dt + lay.dmax / 2;                     // odległość osi prętów od krawędzi (do odporności ogniowej)
   if (g.round) lay.a = g.D / 2 - lay.Rs;
-  else lay.a = Math.min(lay.offC, lay.offM);
+  else lay.a = Math.min(...lay.bars.map(b => Math.min(b.x, b.y, g.b - b.x, g.h - b.y)));
+  lay.cmin = lay.cf ? Math.min(lay.cf.top, lay.cf.bot, lay.cf.lft, lay.cf.rgt) : c;
   // najmniejszy odstęp w świetle między prętami (wszystkie pary)
   let mc = Infinity; const B = lay.bars;
   for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) mc = Math.min(mc, Math.hypot(B[i].x - B[j].x, B[i].y - B[j].y) - (B[i].d + B[j].d) / 2);
@@ -904,21 +918,64 @@ function unitM(sch, kind, x, L) {
   }
   return [0, 0];
 }
+// pręt o stałej sztywności (MES, elementy belkowe Hermite'a): M(x), V(x) w punktach XI·L od siły poziomej P = 1 ('P')
+// lub momentu skupionego C = 1 ('C') przyłożonych na wysokości a; konwencja jak unitM (M = EI·w'', V = dM/dx)
+const FE_CACHE = new Map();
+function unitFE(sch, L, a, type) {
+  const key = `${sch}|${Math.round(L)}|${Math.round(a)}|${type}`;
+  if (FE_CACHE.has(key)) return FE_CACHE.get(key);
+  const xs = Array.from(new Set(XI.map(x => Math.round(x * L * 1000) / 1000).concat([Math.round(a * 1000) / 1000]))).sort((p, q) => p - q);
+  const n = xs.length, ND = 2 * n, K = Array.from({ length: ND }, () => new Float64Array(ND)), F = new Float64Array(ND);
+  for (let e = 0; e < n - 1; e++) {
+    const h = xs[e + 1] - xs[e], h2 = h * h, h3 = h2 * h;
+    const k = [[12 / h3, 6 / h2, -12 / h3, 6 / h2], [6 / h2, 4 / h, -6 / h2, 2 / h], [-12 / h3, -6 / h2, 12 / h3, -6 / h2], [6 / h2, 2 / h, -6 / h2, 4 / h]];
+    const id = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) K[id[i]][id[j]] += k[i][j];
+  }
+  const ka = xs.findIndex(x => Math.abs(x - Math.round(a * 1000) / 1000) < 1e-6);
+  if (type === 'P') F[2 * ka] = 1; else F[2 * ka + 1] = 1;
+  const fix = new Set([0]); if (sch !== 'pp') fix.add(1);
+  if (sch === 'pp' || sch === 'fp' || sch === 'ff') fix.add(ND - 2);
+  if (sch === 'ff' || sch === 'ffs') fix.add(ND - 1);
+  const free = []; for (let i = 0; i < ND; i++) if (!fix.has(i)) free.push(i);
+  const m = free.length, A = free.map(i => Float64Array.from(free.map(j => K[i][j]))), b = Float64Array.from(free.map(i => F[i]));
+  for (let c = 0; c < m; c++) {
+    let pv = c; for (let r = c + 1; r < m; r++) if (Math.abs(A[r][c]) > Math.abs(A[pv][c])) pv = r;
+    if (pv !== c) { const t = A[c]; A[c] = A[pv]; A[pv] = t; const tb = b[c]; b[c] = b[pv]; b[pv] = tb; }
+    const d = A[c][c]; if (Math.abs(d) < 1e-30) continue;
+    for (let r = c + 1; r < m; r++) { const f = A[r][c] / d; if (!f) continue; for (let j = c; j < m; j++) A[r][j] -= f * A[c][j]; b[r] -= f * b[c]; }
+  }
+  const xsol = new Float64Array(m);
+  for (let r = m - 1; r >= 0; r--) { let v = b[r]; for (let j = r + 1; j < m; j++) v -= A[r][j] * xsol[j]; xsol[r] = Math.abs(A[r][r]) > 1e-30 ? v / A[r][r] : 0; }
+  const u = new Float64Array(ND); free.forEach((i, k) => { u[i] = xsol[k]; });
+  const el = []; for (let e = 0; e < n - 1; e++) { const h = xs[e + 1] - xs[e], h2 = h * h, wi = u[2 * e], ti = u[2 * e + 1], wj = u[2 * e + 2], tj = u[2 * e + 3];
+    el.push({ Ms: -6 / h2 * wi - 4 / h * ti + 6 / h2 * wj - 2 / h * tj, Me: 6 / h2 * wi + 2 / h * ti - 6 / h2 * wj + 4 / h * tj, h }); }
+  const M = new Float64Array(NPT + 1), V = new Float64Array(NPT + 1);
+  XI.forEach((xi, i) => { const x = Math.round(xi * L * 1000) / 1000, k = xs.findIndex(q => Math.abs(q - x) < 1e-6); const e = el[Math.max(0, k - 1)]; if (!e) return;
+    M[i] = k === 0 ? e.Ms : e.Me; V[i] = (e.Me - e.Ms) / e.h; });
+  const out = { M, V }; if (FE_CACHE.size > 400) FE_CACHE.clear(); FE_CACHE.set(key, out); return out;
+}
 // rozkład od jednego obciążenia (wartości charakterystyczne, współczynnik 1): M[], V[] w obu kierunkach, N w głowicy
 function itemDist(it, S, g) {
   const L = g.L, out = { Ntop: 0, sw: false, y: { M: new Float64Array(NPT + 1), V: new Float64Array(NPT + 1), tr: false }, z: { M: new Float64Array(NPT + 1), V: new Float64Array(NPT + 1), tr: false } };
   if (it.kind === 'sw') { out.sw = true; return out; }
-  out.Ntop = it.N * 1e3;
+  // siła pionowa w głowicy albo na wysokości z_N (np. wspornik, belka podparta w połowie wysokości) – mimośród daje moment skupiony
+  const hgt = v => (v === '' || v === null || v === undefined || !isFinite(+v)) ? L : clamp(+v * 1000, 0, L);
+  const aN = hgt(it.zN), aH = hgt(it.zH), topN = aN >= L - 0.5, topH = aH >= L - 0.5;
+  out.Ntop = topN ? it.N * 1e3 : 0;
+  if (!topN && it.N) out.Npt = { a: aN, P: it.N * 1e3 };
   const map = { y: { H: it.Hh, q: it.qh, e: it.eh, Mt: it.Myt, Mb: it.Myb, V: it.Vy }, z: { H: it.Hb, q: it.qb, e: it.eb, Mt: it.Mzt, Mzb: 0, Mb: it.Mzb, V: it.Vz } };
   DIRS.forEach(d => {
     const q = map[d], sch = S.buck[d].sch, D = out[d];
-    const H = (q.H || 0) * 1e3, qq = q.q || 0, Ma = out.Ntop * (q.e || 0), Mt = (q.Mt || 0) * 1e6, Mb = (q.Mb || 0) * 1e6;
-    D.tr = Math.abs(H) > 0 && (sch === 'cant' || sch === 'ffs') || Math.abs(qq) > 0;
+    const Hf = (q.H || 0) * 1e3, H = topH ? Hf : 0, qq = q.q || 0, Ma = topN ? out.Ntop * (q.e || 0) : 0, Mt = (q.Mt || 0) * 1e6, Mb = (q.Mb || 0) * 1e6;
+    const Cpt = !topN ? it.N * 1e3 * (q.e || 0) : 0, Hpt = !topH ? Hf : 0;
+    const fC = Cpt ? unitFE(sch, L, aN, 'C') : null, fP = Hpt ? unitFE(sch, L, aH, 'P') : null;
+    D.tr = Math.abs(H) > 0 && (sch === 'cant' || sch === 'ffs') || Math.abs(qq) > 0 || Math.abs(Cpt) > 0 || Math.abs(Hpt) > 0;
     for (let i = 0; i <= NPT; i++) {
       const x = XI[i] * L;
       const uH = unitM(sch, 'H', x, L), uq = unitM(sch, 'q', x, L), uM = unitM(sch, 'Ma', x, L);
-      D.M[i] = H * uH[0] + qq * uq[0] + Ma * uM[0] + Mb + (Mt - Mb) * XI[i];
-      D.V[i] = H * uH[1] + qq * uq[1] + Ma * uM[1] + (Mt - Mb) / L;
+      D.M[i] = H * uH[0] + qq * uq[0] + Ma * uM[0] + Mb + (Mt - Mb) * XI[i] + (fC ? Cpt * fC.M[i] : 0) + (fP ? Hpt * fP.M[i] : 0);
+      D.V[i] = H * uH[1] + qq * uq[1] + Ma * uM[1] + (Mt - Mb) / L + (fC ? Cpt * fC.V[i] : 0) + (fP ? Hpt * fP.V[i] : 0);
     }
     if (q.V !== undefined && q.V !== '' && q.V !== null && isFinite(+q.V)) D.Vgiven = Math.abs(+q.V) * 1e3;
   });
@@ -934,7 +991,10 @@ function loadItems(S, g) {
     return items;
   }
   let nG = 0, nQ = 0;
-  Lo.items.forEach(it => { if (it.off) return; const perm = it.kind === 'perm'; items.push(Object.assign({}, it, { id: perm ? 'G' + (++nG) : 'Q' + (++nQ), perm, psi: perm ? null : psiOf(it) })); });
+  const own = Lo.items.filter(it => !it.off).map(it => Object.assign({}, it));
+  const same = (a, b) => a.kind === b.kind && (a.kind !== 'imp' || a.cat === b.cat) && String(a.name || '').trim().toLowerCase() === String(b.name || '').trim().toLowerCase();
+  (S.above || []).forEach(q => { if (!q.N) return; const t = own.find(it => same(it, q)); if (t) { t.N = (+t.N || 0) + q.N; t.fromAbove = (t.fromAbove || 0) + q.N; } else own.push(normItem(Object.assign({}, q, { fromAbove: q.N, aboveOnly: true }))); });
+  own.forEach(it => { const perm = it.kind === 'perm'; items.push(Object.assign({}, it, { id: perm ? 'G' + (++nG) : 'Q' + (++nQ), perm, psi: perm ? null : psiOf(it) })); });
   return items;
 }
 function genCombos(items, Lo) {
@@ -1006,17 +1066,19 @@ function comboDesc(c, items) {
 }
 // siły I rzędu dla wektora współczynników f
 function superpose(dists, items, f, g) {
-  const L = g.L, r = { Ntop: 0, Nbot: 0, Nmid: 0, y: { M: new Float64Array(NPT + 1), V: new Float64Array(NPT + 1), tr: false, Vg: 0 }, z: { M: new Float64Array(NPT + 1), V: new Float64Array(NPT + 1), tr: false, Vg: 0 }, swF: 0 };
+  const L = g.L, r = { Ntop: 0, Nbot: 0, Nmid: 0, Npts: [], y: { M: new Float64Array(NPT + 1), V: new Float64Array(NPT + 1), tr: false, Vg: 0 }, z: { M: new Float64Array(NPT + 1), V: new Float64Array(NPT + 1), tr: false, Vg: 0 }, swF: 0 };
   for (let k = 0; k < items.length; k++) {
     const a = f[k]; if (!a) continue;
     const d = dists[k];
     if (d.sw) { r.swF = a; continue; }
     r.Ntop += a * d.Ntop;
+    if (d.Npt) { const q = r.Npts.find(p => Math.abs(p.a - d.Npt.a) < 1); if (q) q.P += a * d.Npt.P; else r.Npts.push({ a: d.Npt.a, P: a * d.Npt.P }); }
     DIRS.forEach(dd => { const A = r[dd], B = d[dd]; for (let i = 0; i <= NPT; i++) { A.M[i] += a * B.M[i]; A.V[i] += a * B.V[i]; } if (B.tr) A.tr = true; if (B.Vgiven) A.Vg += Math.abs(a) * B.Vgiven; });
   }
-  r.Nbot = r.Ntop + r.swF * g.selfW * L;
-  r.Nmid = r.Ntop + r.swF * g.selfW * L / 2;
-  r.Nat = xi => r.Ntop + r.swF * g.selfW * L * (1 - xi);
+  const Np = xi => r.Npts.reduce((s2, p) => s2 + (xi * L < p.a - 0.5 ? p.P : 0), 0);
+  r.Nat = xi => r.Ntop + r.swF * g.selfW * L * (1 - xi) + Np(xi);
+  r.Nbot = r.Nat(0);
+  r.Nmid = r.Nat(0.5);
   return r;
 }
 
@@ -1310,7 +1372,7 @@ function anchCalc(S, m, lay, cov, tension) {
   const lbminC = Math.max(0.6 * lbrqd, 10 * dia, 100);
   const lbdC = Math.max(lbrqd, lbminC);
   const lbminT = Math.max(0.3 * lbrqd, 10 * dia, 100);
-  const cd = Math.min(cov.cnom + lay.dt, 50);
+  const cd = Math.min((lay.cmin !== undefined ? lay.cmin : cov.cnom) + lay.dt, 50);
   const al1 = cd > 3 * dia ? 0.7 : 1.0;
   const lbdT = Math.max(al1 * lbrqd, lbminT);
   const lbd = Math.max(lbdC, tension ? lbdT : 0);
@@ -1365,19 +1427,21 @@ function schedule(S, g, lay, cov, anch, ties) {
     const n = groups[d];
     const lTopStraight = top === 'cont' ? S.det.hTop + anch.l0 : S.det.hTop - c - dt - d;
     const straight = L + lTopStraight;
-    const leg = top === 'anch' ? ceilTo(Math.max(bendLeg(d), anch.lbd - (S.det.hTop - c)), 10) : 0;
+    const legAuto = top === 'anch' ? ceilTo(Math.max(bendLeg(d), anch.lbd - (S.det.hTop - c)), 10) : 0;
+    const leg = top === 'anch' ? (S.det.legTop !== 'auto' ? S.det.legTop : legAuto) : 0;
     rows.push({ pos: ++pos, kind: 'main', name: 'Pręty podłużne słupa', d, n, len: ceilTo(straight + leg, 10), straight: ceilTo(straight, 10), leg, shape: top === 'anch' ? 'L' : 'I' });
   });
   if (base === 'found') dias.forEach(d => {
     const n = groups[d];
-    const inF = S.det.hF - S.det.cF - 2 * 10;              // nad siatką dolną fundamentu
-    const foot = ceilTo(Math.max(15 * d, 200), 10);
+    const inF = S.det.inF !== 'auto' ? Math.min(S.det.inF, S.det.hF - S.det.cF - 20) : S.det.hF - S.det.cF - 2 * 10;   // nad siatką dolną fundamentu
+    const foot = S.det.footF !== 'auto' ? S.det.footF : ceilTo(Math.max(15 * d, 200), 10);
     const above = anch.l0 + (S.det.kicker || 0);
     rows.push({ pos: ++pos, kind: 'start', name: 'Pręty startowe (w fundamencie)', d, n, len: ceilTo(inF + above + foot, 10), straight: ceilTo(inF + above, 10), leg: foot, inF, above, shape: 'L' });
   });
   // strzemiona
   const hoop = (Dt, nm) => rows.push({ pos: ++pos, kind: 'tie', name: nm, d: dt, n: ties.sets, len: ceilTo(Math.PI * Dt + 2 * hook, 10), hook, hookMin, shape: 'O', Dt });
-  const rtie = (t, nm) => { const bt = (t.x1 - t.x0) - 2 * c - dt, ht = (t.y1 - t.y0) - 2 * c - dt; rows.push({ pos: ++pos, kind: 'tie', name: nm, d: dt, n: ties.sets, len: ceilTo(2 * (bt + ht) + 2 * hook, 10), hook, hookMin, shape: 'S', bt, ht }); };
+  const cf = lay.cf || { top: c, bot: c, lft: c, rgt: c };
+  const rtie = (t, nm) => { const bt = (t.x1 - t.x0) - (g.isPoly ? 2 * c : cf.lft + cf.rgt) - dt, ht = (t.y1 - t.y0) - (g.isPoly ? 2 * c : cf.top + cf.bot) - dt; rows.push({ pos: ++pos, kind: 'tie', name: nm, d: dt, n: ties.sets, len: ceilTo(2 * (bt + ht) + 2 * hook, 10), hook, hookMin, shape: 'S', bt, ht }); };
   if (g.circ) hoop(g.D - 2 * c - dt, 'Strzemiona okrągłe');
   else if (g.ring) { hoop(g.D - 2 * c - dt, 'Strzemiona okrągłe zewnętrzne'); if (lay.Rti) hoop(2 * lay.Rti, 'Strzemiona okrągłe wewnętrzne'); }
   else if (g.isPoly) g.ties.forEach(t => rtie(t, `Strzemiona zamknięte – ${t.name}`));
@@ -1387,8 +1451,8 @@ function schedule(S, g, lay, cov, anch, ties) {
     Object.keys(grp).map(Number).sort((u, v) => v - u).forEach(L => rows.push({ pos: ++pos, kind: 'pin', name: 'Szpilki', d: dt, n: grp[L] * ties.sets, len: L, hook, shape: 'P' }));
   } else if (lay.pins.length) {
     const pH = lay.pins.filter(p => p.dir === 'h').length, pB = lay.pins.filter(p => p.dir === 'b').length;
-    if (pH) rows.push({ pos: ++pos, kind: 'pin', name: 'Szpilki (w kierunku h)', d: dt, n: pH * ties.sets, len: ceilTo(g.h - 2 * c + 2 * hook, 10), hook, shape: 'P' });
-    if (pB) rows.push({ pos: ++pos, kind: 'pin', name: 'Szpilki (w kierunku b)', d: dt, n: pB * ties.sets, len: ceilTo(g.b - 2 * c + 2 * hook, 10), hook, shape: 'P' });
+    if (pH) rows.push({ pos: ++pos, kind: 'pin', name: 'Szpilki (w kierunku h)', d: dt, n: pH * ties.sets, len: ceilTo(g.h - cf.top - cf.bot + 2 * hook, 10), hook, shape: 'P' });
+    if (pB) rows.push({ pos: ++pos, kind: 'pin', name: 'Szpilki (w kierunku b)', d: dt, n: pB * ties.sets, len: ceilTo(g.b - cf.lft - cf.rgt + 2 * hook, 10), hook, shape: 'P' });
   }
   rows.forEach(r => { r.tot = r.n * r.len / 1000; r.kg = r.tot * massPerM(r.d); r.steel = r.kind === 'tie' || r.kind === 'pin' ? 'W' : 'L'; });
   const byD = {}; rows.forEach(r => { const k = r.steel + r.d; byD[k] = byD[k] || { d: r.d, steel: r.steel, m: 0, kg: 0 }; byD[k].m += r.tot; byD[k].kg += r.kg; });
@@ -1410,6 +1474,7 @@ function calc(S0, opts) {
   const dt0 = tieDia(S);
   const cov = R.cov = coverCalc(S, m, S.reb.set ? rebDmax(S) : 12, dt0);
   const lay = R.lay = layoutBars(S, g, cov, m);
+  { const lim = lay.n > 1 && isFinite(lay.minClear) ? lay.minClear - 5 : Infinity, sel = [32, 22, 16, 8].find(v => v <= lim) || 8; R.dg = { auto: S.mat.dgAuto, lim, sel: S.mat.dgAuto ? sel : S.mat.dg }; }
   R.bare = !lay.n;
   const cr = R.creep = creepCalc(S, m, g);
   // długości wyboczeniowe, imperfekcje
@@ -1656,7 +1721,7 @@ function slsCalc(R, S) {
     const ss = Math.max(cu.ss, 0);
     const de1 = (ss - kt * fct / rho * (1 + ae * rho)) / m.Es, de2 = 0.6 * ss / m.Es;
     const de = Math.max(de1, de2);
-    const c = R.cov.cnom + lay.dt, phiB = lay.dmax;
+    const c = (lay.cmin !== undefined ? lay.cmin : R.cov.cnom) + lay.dt, phiB = lay.dmax;
     const k1 = 0.8, k2 = 0.5, k3 = 3.4, k4 = 0.425;
     const spacing = g.round ? (lay.faces.c ? lay.faces.c.ctc : 0) : g.isPoly ? lay.ctcMax : (dir === 'y' ? lay.faces.b.ctc : lay.faces.h.ctc);
     let sr = k3 * c + k1 * k2 * k4 * phiB / rho, srNote = '7.11';
@@ -1683,6 +1748,8 @@ function checksCalc(R, S) {
   const gK = 'Otulina i trwałość', gD = 'Konstrukcja (rozdz. 8 i 9.5)', gN = 'SGN – ściskanie ze zginaniem', gS = 'SGN – smukłość i efekty II rzędu', gV = 'SGN – ścinanie', gU = 'SGU – naprężenia i rysy', gF = 'Odporność ogniowa (PN-EN 1992-1-2)';
   // otulina
   add(gK, 'cnom', 'Otulina nominalna c_nom (do strzemion)', '4.4.1', cov.reqR, cov.cnom, 'mm', { rel: '≥', note: cov.manual ? `przyjęto ręcznie; wymagane ${cov.req.toFixed(0)} mm → ${cov.reqR} mm` : `wymagane ${cov.req.toFixed(0)} mm → zaokr. ${cov.reqR} mm`, sec: 'cov' });
+  if (lay.cf) ['top', 'bot', 'lft', 'rgt'].forEach(k => { if (S.env.cf && S.env.cf[k] !== 'auto') add(gK, 'cnomF', `Otulina boku ${FACE_N[k]} c_nom (zadana dla boku)`, '4.4.1', cov.reqR, lay.cf[k], 'mm', { rel: '≥', note: `wymagane ${cov.reqR} mm`, sec: 'cov', at: { face: k } }); });
+  if (R.dg && R.dg.auto) add(gK, 'dg', `Maksymalny wymiar kruszywa d_g = ${R.dg.sel} mm (dobrany automatycznie)`, '8.2(2)', R.dg.sel, isFinite(R.dg.lim) ? R.dg.lim : 999, 'mm', { status: 'info', ratio: 0, note: isFinite(R.dg.lim) ? `najmniejszy prześwit prętów ${Math.round(R.dg.lim + 5)} mm → d_g ≤ ${Math.round(R.dg.lim)} mm; typoszereg 8 / 16 / 22 / 32 mm` : 'brak ograniczenia od prześwitu prętów – przyjęto 32 mm', sec: 'cov' });
   const mc = add(gK, 'minclass', 'Minimalna klasa betonu dla ekspozycji', 'Zał. E', classIdx(cov.minCls), classIdx(S.mat.concrete), '', { rel: '≥', soft: true, ratio: cov.minOk ? 0 : 1.01, status: cov.minOk ? 'ok' : 'warn', note: `${S.mat.concrete} vs min. ${cov.minCls} (${cov.minFrom})`, fmt: 'text', sec: 'cov' });
   mc.EdTxt = cov.minCls; mc.RdTxt = S.mat.concrete;
   if (g.wall) add(gD, 'wall', 'Element o h > 4b – ściana, nie słup (9.5.1)', '9.5.1', g.dmax / g.dmin, 4, '', { soft: true, note: 'zastosuj wymagania dla ścian (9.6)', sec: 'det' });
@@ -1758,7 +1825,7 @@ function checksCalc(R, S) {
     add(gD, 'asmaxl', `Zbrojenie w strefie zakładu ≤ 0,08·A_c (${S.det.lap === '100' ? 'wszystkie pręty łączone w jednym przekroju' : '50% prętów łączonych'})`, '9.5.2(3)', lapF * lay.As, 0.08 * g.Ac, 'mm²', { sec: 'det' });
     add(gD, 'phimin', 'Średnica prętów podłużnych ⌀ ≥ ⌀_min', '9.5.2(1)', S.coef.phiMin, lay.dmin, 'mm', { rel: '≥', sec: 'det' });
     if (g.round) add(gD, 'nbars', `Liczba prętów w słupie ${g.ring ? 'pierścieniowym' : 'okrągłym'} ≥ 4 (zalecane ≥ 6)`, '9.5.2(4)', 4, lay.n, 'szt.', { rel: '≥', note: lay.n < 6 ? 'zalecane co najmniej 6 prętów' : '', sec: 'det' });
-    else { const nC = g.convex.length, hit = g.convex.filter(([x, y]) => lay.bars.some(q => Math.hypot(q.x - x, q.y - y) <= (lay.offC || 50) * 1.5 + 2)).length; add(gD, 'nbars', 'Pręt w każdym narożu przekroju', '9.5.2(4)', nC, hit, 'szt.', { rel: '≥', ratio: hit >= nC ? nC / Math.max(hit, 1) : Infinity, status: hit >= nC ? 'ok' : 'fail', sec: 'det', note: `naroży wypukłych: ${nC}` }); }
+    else { const nC = g.convex.length, hit = g.convex.filter(([x, y]) => lay.bars.some(q => Math.hypot(q.x - x, q.y - y) <= (lay.offCmax || lay.offC || 50) * 1.5 + 2)).length; add(gD, 'nbars', 'Pręt w każdym narożu przekroju', '9.5.2(4)', nC, hit, 'szt.', { rel: '≥', ratio: hit >= nC ? nC / Math.max(hit, 1) : Infinity, status: hit >= nC ? 'ok' : 'fail', sec: 'det', note: `naroży wypukłych: ${nC}` }); }
     const clr = lay.minClear;
     if (lay.n > 1) add(gD, 'sp', 'Odstęp prętów w świetle ≥ max(⌀; d_g + 5 mm; 20 mm)', '8.2(2)', lay.smin, clr, 'mm', { rel: '≥', sec: 'det' });
     if (lay.core !== undefined && S.reb.vibOn) add(gD, 'vib', `Prześwit na buławę wibratora ⌀${S.reb.vib} mm (pole między strzemieniem i szpilkami)`, '8.2(4)', S.reb.vib + 10, lay.core, 'mm', { rel: '≥', soft: true, note: 'zagęszczanie betonu buławą wprowadzaną od góry wewnątrz zbrojenia; wyłącz opcję przy innym sposobie zagęszczania', sec: 'det' });
@@ -1776,7 +1843,7 @@ function checksCalc(R, S) {
     const sch = R.sched;
     if (sch && sch.tooLong.length) add(gD, 'Lmax', `Długość pręta ≤ L_max = ${S.det.Lmax} m`, '—', Math.max(...sch.tooLong.map(r => r.len)) / 1000, S.det.Lmax, 'm', { soft: true, note: 'podziel pręty zakładem', sec: 'sched' });
     if (S.det.base === 'found') {
-      const av = S.det.hF - S.det.cF - 20;
+      const av = S.det.inF !== 'auto' ? Math.min(S.det.inF, S.det.hF - S.det.cF - 20) : S.det.hF - S.det.cF - 20;
       add(gD, 'anchF', 'Zakotwienie prętów startowych w fundamencie: h_F − c ≥ l_bd', '8.4.4', R.anch.lbd, av, 'mm', { rel: '≥', ratio: av > 0 ? R.anch.lbd / av : Infinity, soft: true, note: `${R.anch.tension ? 'pręty rozciągane – z odgięciem α₁' : 'pręty ściskane – odgięcie nie skraca zakotwienia'}; zwiększ wysokość fundamentu lub zastosuj mniejsze średnice`, sec: 'anch' });
     }
   }
@@ -1935,7 +2002,7 @@ const API = {
   bucklingDir, imperfection, unitM, itemDist, genCombos, comboDesc, superpose, evalDir, m2Shape, fireCalc, anchCalc, schedule,
   autoReb, designDims, dimCandidates, applyDims, dimLabel, tryDims, badChecks, rebCandidates, applyCand, newItem, newRow, psiOf, normItem, normRow, tieDia, tieDiaAuto, barsDir, partsOf, mkCurve,
   CONCRETE, CONC_NAMES, STEEL, STEEL_LIST, BAR_DIAS, MAIN_DIAS, TIE_DIAS, EXPOSURES, EXP_DESC, PSI, VAR_KINDS, SCH, DIRS, FIRE_COL, FIRE_MIN, WMAX, MIN_CLASS, CMIN_DUR,
-  area, num, clamp, massPerM, mandrelMin, classIdx, ETA_IDS, NPT, XI, FACES, FACE_N, rectFaces, rebDmax, rebText,
+  area, num, clamp, massPerM, mandrelMin, classIdx, ETA_IDS, NPT, XI, FACES, FACE_N, rectFaces, rebDmax, rebText, unitFE, unitM, minClsOf,
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API;
 root.EC2 = API;

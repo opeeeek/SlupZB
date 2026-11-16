@@ -97,9 +97,10 @@ SZX.build = function (R, S) {
     D.dimH(Xs(0), Xs(g.b), Ys(0) + 6, fmt(g.b, 0)); D.dimV(Xs(0) - 6, Ys(g.h), Ys(0), fmt(g.h, 0));
   } else {
     D.pline([[Xs(0), Ys(0)], [Xs(g.b), Ys(0)], [Xs(g.b), Ys(g.h)], [Xs(0), Ys(g.h)]], 'PRZEKROJE', true);
-    const o = cov.cnom + lay.dt / 2, r = (lay.rin + lay.dt / 2) / Ks;
-    D.rrect(Xs(o), Ys(g.h - o), Xs(g.b - o), Ys(o), r, 'STRZEMIONA');
-    lay.pins.forEach(p => { if (p.dir === 'h') D.line(Xs(p.x + p.d / 2 + lay.dt / 2), Ys(o), Xs(p.x + p.d / 2 + lay.dt / 2), Ys(g.h - o), 'SZPILKI'); else D.line(Xs(o), Ys(p.y + p.d / 2 + lay.dt / 2), Xs(g.b - o), Ys(p.y + p.d / 2 + lay.dt / 2), 'SZPILKI'); });
+    const cf = lay.cf || { top: cov.cnom, bot: cov.cnom, lft: cov.cnom, rgt: cov.cnom }, h2 = lay.dt / 2, r = (lay.rin + lay.dt / 2) / Ks;
+    const oL = cf.lft + h2, oR = cf.rgt + h2, oT = cf.top + h2, oB = cf.bot + h2;
+    D.rrect(Xs(oL), Ys(g.h - oB), Xs(g.b - oR), Ys(oT), r, 'STRZEMIONA');
+    lay.pins.forEach(p => { if (p.dir === 'h') D.line(Xs(p.x + p.d / 2 + lay.dt / 2), Ys(oT), Xs(p.x + p.d / 2 + lay.dt / 2), Ys(g.h - oB), 'SZPILKI'); else D.line(Xs(oL), Ys(p.y + p.d / 2 + lay.dt / 2), Xs(g.b - oR), Ys(p.y + p.d / 2 + lay.dt / 2), 'SZPILKI'); });
     D.dimH(Xs(0), Xs(g.b), Ys(0) + 6, fmt(g.b, 0)); D.dimV(Xs(0) - 6, Ys(g.h), Ys(0), fmt(g.h, 0));
   }
   lay.bars.forEach(b => D.dot(Xs(b.x), Ys(b.y), Math.max(0.6, b.d / Ks), 'ZBR_PODLUZNE'));

@@ -4,7 +4,7 @@
 const E = window.EC2, Dw = window.SZD;
 const U = window.SZ = {};
 let S = E.defaultState();
-let R = null, filePath = '', dirty = false, rendered = {}, selCombo = null, schDiag = 'M', chSrc = null;
+let R = null, filePath = '', dirty = false, rendered = {}, selCombo = null, schDiag = 'M', chSrc = null, schDims = true;
 
 /* ------------------------------------------------------------ narzędzia */
 const $ = (s, el) => (el || document).querySelector(s);
@@ -64,10 +64,10 @@ const GROUPS = [
     { t: 'hint', exT: 'Jak wybrać warunki podparcia?', h: () => hintBuck() },
   ] },
   { id: 'mat', title: 'Materiały', items: [
-    { k: 'mat.concrete', t: 'sel', l: 'Klasa betonu', o: () => E.CONC_NAMES.map(n => [n, n]) },
+    { t: 'html', h: () => concHTML() },
     { k: 'mat.steel', t: 'sel', l: 'Stal zbrojenia podłużnego', o: () => E.STEEL_LIST.map(s => [s.id, s.name]), wide: true },
     { k: 'mat.steelW', t: 'sel', l: 'Stal strzemion', o: () => E.STEEL_LIST.map(s => [s.id, s.name]), wide: true },
-    { k: 'mat.dg', t: 'sel', l: 'Maks. wymiar kruszywa d_{g}', o: [[8, '8 mm'], [16, '16 mm'], [22, '22 mm'], [32, '32 mm']], num: true },
+    { t: 'html', h: () => dgHTML() },
     { k: 'mat.diag', t: 'sel', l: 'Wykres σ–ε betonu (nośność przekroju)', o: [['parab', 'parabola-prostokąt (3.1.7(1))'], ['rect', 'prostokątny (3.1.7(3))']], wide: true },
     { t: 'hint', h: s => { const m = E.materials(E.normalize(s)); return `f<sub>cd</sub> = ${fmt(m.fcd)} MPa · E<sub>cm</sub> = ${fmt(m.Ecm / 1000, 0)} GPa · E<sub>cd</sub> = E<sub>cm</sub>/γ<sub>cE</sub> = ${fmt(m.Ecd / 1000, 1)} GPa · f<sub>yd</sub> = ${fmt(m.fyd)} MPa · ε<sub>yd</sub> = ${fmt(m.eyd * 1000, 2)}‰ · f<sub>ywd</sub> = ${fmt(m.fywd)} MPa`; } },
   ] },
@@ -123,6 +123,9 @@ const GROUPS = [
     { k: 'reb.fixD', t: 'sel', l: 'Średnica prętów przy doborze zbrojenia', o: [['', 'automatycznie – najmniejsza masa stali'], ...E.MAIN_DIAS.filter(d => d !== 14).map(d => [String(d), '⌀' + d])], wide: true },
     { k: 'stir.d', t: 'sel', l: 'Średnica strzemion ⌀_{t}', o: [['auto', 'auto: max(6; ⌀/4)'], ...E.TIE_DIAS.map(d => [d, '⌀' + d])], re: true },
     { k: 'stir.s', t: 'num', auto: true, l: 'Rozstaw strzemion s (poza strefami zagęszczenia)', u: 'mm', list: ['auto', 100, 150, 200, 250, 300, 350, 400], ph: 'auto' },
+    { k: 'stir.sRed', t: 'num', auto: true, l: 'Rozstaw w strefach zagęszczenia s_{red}', u: 'mm', list: ['auto', 75, 100, 125, 150, 175, 200, 225], ph: 'auto' },
+    { k: 'stir.zB', t: 'num', auto: true, l: 'Długość strefy zagęszczenia u dołu', u: 'mm', list: ['auto', 400, 500, 600, 800, 1000, 1200, 1500, 2000], ph: 'auto' },
+    { k: 'stir.zT', t: 'num', auto: true, l: 'Długość strefy zagęszczenia u góry', u: 'mm', list: ['auto', 300, 400, 500, 600, 800, 1000], ph: 'auto' },
     { k: 'stir.pins', t: 'sel', l: 'Szpilki / strzemiona wewnętrzne', o: [['auto', 'gdzie wymagane (9.5.3(6): ≤ 150 mm)'], ['all', 'przy każdym pręcie'], ['none', 'brak – tylko strzemię obwodowe']], wide: true, re: true, show: s => !ROUND(s) },
     { k: 'det.base', t: 'sel', l: 'Dół słupa', o: [['found', 'fundament – pręty startowe'], ['col', 'słup kondygnacji niższej – zakład nad stropem']], wide: true, re: true },
     { k: 'det.hF', t: 'num', l: 'Wysokość fundamentu h_{F}', u: 'mm', list: [400, 500, 600, 700, 800, 1000, 1200], min: 200, show: s => s.det.base === 'found' },
@@ -246,6 +249,7 @@ function fieldsHTML(items, gid) {
     const id = `f_${gid}_${i}`;
     if (f.t === 'hint') { const h = hintHTML(f); html += `<div class="hint" data-hint="${gid}_${i}"${h ? '' : ' style="display:none"'}>${h}</div>`; return; }
     if (f.t === 'sub') { html += `<div class="lsub">${sym(f.l)}</div>`; return; }
+    if (f.t === 'html') { html += f.h(S); return; }
     if (f.t === 'sel') {
       const v = getP(S, f.k); const opts = typeof f.o === 'function' ? f.o(S) : f.o;
       html += `<div class="row ${f.wide ? 'wide' : ''}"><label for="${id}">${lab(f)}</label><select id="${id}" data-k="${f.k}" data-num="${f.num ? 1 : ''}" data-re="${f.re ? 1 : ''}">${opts.map(([val, l]) => `<option value="${esc(val)}" ${String(val) === String(v === undefined ? '' : v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>${f.wide ? '' : '<span></span>'}</div>`;
@@ -274,7 +278,45 @@ function refreshHints() {
     const open = !!el.querySelector('details.exh[open]'), h = hintHTML(f); el.innerHTML = h; el.style.display = h ? '' : 'none'; if (open) { const d = el.querySelector('details.exh'); if (d) d.open = true; }
   }));
 }
+// klasa betonu: lista z „Auto” (minimalna dla ekspozycji, wyższa – gdy wymaga jej dobór), blokada klasy, tabela parametrów klas (jak BelkaŻB 2.10)
+const LOCK_SVG = on => `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 7 V4.8 a2.8 2.8 0 0 1 5.6 0 ${on ? 'V7' : 'V5.6'}" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
+function concHTML() {
+  const a = S.mat.autoC, lk = S.mat.lockC, mc = E.minClsOf(S);
+  const opts = `<option value="auto" ${a ? 'selected' : ''}>Auto${a ? ` – ${esc(S.mat.concrete)}` : ''}</option>` + E.CONC_NAMES.map(n => `<option value="${n}" ${!a && n === S.mat.concrete ? 'selected' : ''}>${n}</option>`).join('');
+  let info = '';
+  if (a) info = `Klasa <b>Auto</b> – obecnie przyjęta <b>${esc(S.mat.concrete)}</b>: ${S.mat.cDes && E.classIdx(S.mat.cDes) > E.classIdx(mc) ? `podniesiona w doborze (przy niższej nie dało się spełnić wszystkich warunków); minimalna dla ekspozycji – ${mc}` : `minimalna dla klas ekspozycji ${[S.env.exp, S.env.expF, S.env.expA].filter(e => e && e !== '-').join(', ')} (zał. E)`}. „Dobierz zbrojenie” / „Dobierz wszystko” podnoszą ją tylko wtedy, gdy przy niższej klasie nie da się spełnić warunków.`;
+  else if (lk) info = `Klasa <b>${esc(S.mat.concrete)}</b> zablokowana – dobór jej nie zmienia${E.classIdx(S.mat.concrete) < E.classIdx(mc) ? ` (uwaga: niższa od minimalnej dla ekspozycji – ${mc})` : ''}.`;
+  else if (E.classIdx(S.mat.concrete) < E.classIdx(mc)) info = `Klasa niższa od minimalnej dla ekspozycji (zał. E): ${mc}.`;
+  return `<div class="row concrow"><label for="fConc">Klasa betonu</label><div class="concbox"><select id="fConc" data-conc="1" title="Auto – klasa dobierana automatycznie">${opts}</select><button type="button" class="btn sm lockb${lk ? ' on' : ''}" id="concLock" aria-pressed="${lk ? 'true' : 'false'}" title="${lk ? 'Klasa zablokowana – kliknij, aby odblokować' : 'Zablokuj klasę – dobór zbrojenia i przekroju nie zmieni klasy betonu'}">${LOCK_SVG(lk)}</button></div><span></span></div>
+    <div class="rowbtn"><button type="button" class="btn sm" id="concTab" title="f_ck, f_cm, f_ctm, E_cm, odkształcenia graniczne – PN-EN 1992-1-1, tablica 3.1">Parametry klas betonu…</button></div>${info ? `<div class="hint keep info">${info}</div>` : ''}`;
+}
+// maksymalny wymiar kruszywa: „Auto” – największa frakcja, przy której prześwity prętów spełniają 8.2(2)
+function dgHTML() {
+  const a = S.mat.dgAuto, dg = R && R.dg ? R.dg : null;
+  const opts = `<option value="auto" ${a ? 'selected' : ''}>Auto${a && dg ? ` – ${dg.sel} mm` : ''}</option>` + [8, 16, 22, 32].map(v => `<option value="${v}" ${!a && +S.mat.dg === v ? 'selected' : ''}>${v} mm</option>`).join('');
+  const info = a ? (dg ? `Kruszywo <b>Auto</b> – dobrano <b>d<sub>g</sub> = ${dg.sel} mm</b>: ${isFinite(dg.lim) ? `najmniejszy prześwit prętów ${fmt(dg.lim + 5, 0)} mm, a 8.2(2) wymaga s ≥ d<sub>g</sub> + 5 mm → d<sub>g</sub> ≤ ${fmt(dg.lim, 0)} mm` : 'brak ograniczenia od prześwitu prętów'}; typoszereg 8 / 16 / 22 / 32 mm.` : 'Kruszywo Auto – wartość po obliczeniu.') :
+    (dg && isFinite(dg.lim) && dg.lim < S.mat.dg ? `Uwaga: najmniejszy prześwit prętów ${fmt(dg.lim + 5, 0)} mm – dla d<sub>g</sub> = ${S.mat.dg} mm wymagane ≥ ${S.mat.dg + 5} mm (8.2(2)).` : '');
+  return `<div class="row"><label for="fDg">Maks. wymiar kruszywa d<sub>g</sub></label><select id="fDg" data-dg="1">${opts}</select><span></span></div>${info ? `<div class="hint keep info">${info}</div>` : ''}`;
+}
+function concTablePopup() {
+  const m = $('#modal'), cur = S.mat.concrete;
+  const rows = E.CONC_NAMES.map(n => { const q = E.materials(Object.assign({}, S, { mat: Object.assign({}, S.mat, { concrete: n, autoC: false }) })); return `<tr class="${n === cur ? 'selr' : ''}" data-cls="${n}" style="cursor:pointer" title="Kliknij, aby przyjąć tę klasę"><td><b>${n}</b></td><td class="n">${fmt(q.fck, 0)}</td><td class="n">${fmt(q.fck + 8, 0)}</td><td class="n">${fmt(q.fctm, 1)}</td><td class="n">${fmt(q.Ecm / 1000, 0)}</td><td class="n">${fmt(q.ec2 * 1000, 2)}</td><td class="n">${fmt(q.ecu2 * 1000, 2)}</td><td class="n">${fmt(q.npar, 2)}</td><td class="n">${fmt(q.fcd, 1)}</td></tr>`; }).join('');
+  m.innerHTML = `<div class="dlg wide"><h3>Parametry klas betonu (PN-EN 1992-1-1, tablica 3.1)</h3><div class="tscroll"><table class="sched"><thead><tr><th>Klasa</th><th>f<sub>ck</sub> [MPa]</th><th>f<sub>cm</sub> [MPa]</th><th>f<sub>ctm</sub> [MPa]</th><th>E<sub>cm</sub> [GPa]</th><th>ε<sub>c2</sub> [‰]</th><th>ε<sub>cu2</sub> [‰]</th><th>n</th><th>f<sub>cd</sub> [MPa]</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint keep">f<sub>cd</sub> = α<sub>cc</sub>·f<sub>ck</sub>/γ<sub>C</sub> (α<sub>cc</sub> = ${fmt(S.coef.acc, 2)}, γ<sub>C</sub> = ${fmt(S.coef.gc, 2)} – z danych). Kliknij wiersz, aby przyjąć klasę (wyłącza „Auto”).</p><div class="dbtn"><button class="btn pri" id="ctClose">Zamknij</button></div></div>`;
+  m.style.display = 'flex'; popRedraw = null; $('#ctClose', m).onclick = closeModal;
+  $$('tr[data-cls]', m).forEach(tr => tr.addEventListener('click', () => { S.mat.concrete = tr.dataset.cls; S.mat.autoC = false; closeModal(); changed(true); }));
+}
+function bindMat(host) {
+  const cs = $('select[data-conc]', host);
+  if (cs) cs.addEventListener('change', () => { if (cs.value === 'auto') { S.mat.autoC = true; S.mat.lockC = false; S.mat.cDes = ''; } else { S.mat.autoC = false; S.mat.concrete = cs.value; } changed(true); });
+  const lk = $('#concLock', host);
+  if (lk) lk.onclick = () => { S.mat.lockC = !S.mat.lockC; if (S.mat.lockC) S.mat.autoC = false; changed(true); toast(S.mat.lockC ? `Klasa betonu ${S.mat.concrete} zablokowana – dobór jej nie zmieni.` : 'Klasa betonu odblokowana – dobór może ją podnieść, gdy przy niższej nie da się spełnić warunków.', 2500); };
+  const ct = $('#concTab', host); if (ct) ct.onclick = () => concTablePopup();
+  const dg = $('select[data-dg]', host);
+  if (dg) dg.addEventListener('change', () => { if (dg.value === 'auto') S.mat.dgAuto = true; else { S.mat.dgAuto = false; S.mat.dg = +dg.value; } changed(true); });
+}
 function bindInputs(host) {
+  bindMat(host);
   $$('select[data-k]', host).forEach(el => el.addEventListener('change', () => {
     let v = el.value; if (el.dataset.num) v = parseNum(v);
     setP(S, el.dataset.k, v);
@@ -330,8 +372,10 @@ function changed(rerender) {
   autosave();
 }
 function recalc() {
+  stackPrep();
   try { R = E.calc(S); } catch (e) { R = { errors: ['Błąd obliczeń: ' + e.message], checks: [], S, res: [] }; console.error(e); }
   U.R = R; U.S = S;
+  if (S.mat.autoC && R && R.S && R.S.mat && R.S.mat.concrete !== S.mat.concrete) { S.mat.concrete = R.S.mat.concrete; setTimeout(renderInputs, 0); }   // klasa Auto – przyjęta na bieżąco
   syncTicks();
   if (selCombo !== null && (!R.res || !R.res[selCombo])) selCombo = null;
   refreshHints();
@@ -500,6 +544,7 @@ function gotoCheck(c) {
   const dims = ['#inputs [data-k="geom.b"]', '#inputs [data-k="geom.h"]', '#inputs [data-k="geom.D"]', '#inputs [data-k="geom.pipe.D"]', '#inputs [data-k="geom.pipe.t"]', '#inputs [data-k^="geom.tee"]', '#inputs [data-k^="geom.ang"]'];
   if (R.bare || id === 'bare') return sec(['#sbAuto']);
   if (id === 'cnom') return go('sec', () => inPop(() => covPopup(), ['[data-k="env.cnomSel"]', '[data-k="env.cnomVal"]']));
+  if (id === 'cnomF' && at.face) return go('sec', () => inPop(() => facePopup(at.face, 'cov'), ['#fcC']));
   if (id === 'minclass') return dat(['#inputs [data-k="mat.concrete"]', '#inputs [data-k="env.exp"]']);
   if (id === 'wall' || id === 'lam140' || id === 'lamP') return dat(dims);
   if (id === 'stab' || id === 'gen' || /^lam/.test(id)) { const d = at.dir || (/płaszczyźnie b/.test(c.name) ? 'z' : 'y'); return dat([`#inputs [data-k="buck.${S.buck.same ? 'y' : d}.sch"]`, `#inputs [data-k="buck.${S.buck.same ? 'y' : d}.mode"]`, ...dims]); }
@@ -530,13 +575,45 @@ function renderAutoBar() {
 }
 const etaOf = () => ((S.design && S.design.eta) || 100) / 100;
 function applyResult(newS, msg) { const name = S.meta.name; S = E.normalize(newS); S.meta.name = name; if (COLS) COLS[curC] = S; dirty = true; renderInputs(); recalc(); updateTitle(); autosave(); if (msg) toast(msg, 5000); }
+// dobór zbrojenia przy klasie betonu „Auto” (bez blokady): gdy przy obecnej klasie nie da się spełnić warunków – kolejne wyższe klasy
+function autoRebCls(S0) {
+  let r = E.autoReb(S0, { eta: etaOf() });
+  if (r.ok || !S0.mat.autoC || S0.mat.lockC) return r;
+  const i0 = E.CONC_NAMES.indexOf(S0.mat.concrete);
+  for (let i = i0 + 1; i < Math.min(E.CONC_NAMES.length, i0 + 5); i++) {
+    const T = JSON.parse(JSON.stringify(S0)); T.mat.cDes = E.CONC_NAMES[i]; T.mat.concrete = E.CONC_NAMES[i];
+    const q = E.autoReb(T, { eta: etaOf() }); if (q.ok) { q.S.mat.autoC = true; q.S.mat.cDes = E.CONC_NAMES[i]; q.cls = E.CONC_NAMES[i]; return q; }
+  }
+  return r;
+}
 function doAutoReb() {
   toast('Dobór zbrojenia…', 1200);
   setTimeout(() => {
-    const t0 = Date.now(); const r = E.autoReb(S, { eta: etaOf() });
-    if (r.ok) { const c = r.cand; applyResult(r.S, `Dobrano zbrojenie (${((Date.now() - t0) / 1000).toFixed(1)} s): ${c.n}⌀${c.d}, A_s = ${fmt(c.As, 0)} mm² – wszystkie warunki spełnione.`); }
-    else toast(r.msg || 'Nie znaleziono zbrojenia.', 6000);
+    const t0 = Date.now(); const r = autoRebCls(S);
+    if (r.ok) { const c = r.cand; applyResult(r.S, `Dobrano zbrojenie (${((Date.now() - t0) / 1000).toFixed(1)} s): ${c.n}⌀${c.d}, A_s = ${fmt(c.As, 0)} mm²${r.cls ? `; klasa betonu podniesiona do ${r.cls}` : ''} – wszystkie warunki spełnione.`); }
+    else cannotPopup(r);
   }, 30);
+}
+// „Wyczyść zbrojenie”: pręty podłużne usunięte, ustawienia strzemion – domyślne (automatycznie), bez nadpisań boków i krawędzi
+function clearReb() {
+  S.reb.set = false; S.reb.pf = false; S.reb.edge = {}; S.reb.fixD = '';
+  S.stir = Object.assign({}, S.stir, { d: 'auto', s: 'auto', sRed: 'auto', zB: 'auto', zT: 'auto', pins: 'auto', hookA: 135 });
+  S.det.l0Man = 'auto'; S.det.legTop = 'auto'; S.det.footF = 'auto'; S.det.inF = 'auto';
+  changed(true); toast('Usunięto zbrojenie podłużne; strzemiona, zakłady i zakończenia prętów – ustawienia automatyczne.', 3500);
+}
+// okno: czego nie da się spełnić samym zbrojeniem – lista warunków i przyczyna, „Dobierz wszystko” (jak BelkaŻB 2.10.0)
+function cannotPopup(r) {
+  const bad = (r.best && r.best.bad) || (r.R ? E.badChecks(r.R, etaOf()) : []);
+  const m = $('#modal'), lockNote = S.mat.lockC ? ' Klasa betonu jest zablokowana – odblokuj ją (Materiały), aby dobór mógł ją podnieść.' : !S.mat.autoC ? ' Klasa betonu ustawiona ręcznie – „Auto” pozwala ją podnieść w doborze.' : '';
+  m.innerHTML = `<div class="dlg"><h3>Nie da się spełnić wszystkich warunków samym zbrojeniem</h3>
+    <p>${esc(r.tooSmall ? 'Przekrój za mały – nawet przy największym możliwym zbrojeniu (A_s ≈ 4% A_c, odstępy prętów 8.2) nie są spełnione warunki:' : (r.msg || 'Nie znaleziono zbrojenia spełniającego wszystkie warunki.').replace(/:.*$/, ':'))}</p>
+    ${bad.length ? `<ul class="badlist">${bad.slice(0, 10).map(c => `<li><span class="st ${c.status}">${STL[c.status]}</span> ${sym(c.name)}${isFinite(c.ratio) ? ` – ${fmt(c.ratio * 100, 0)}%` : ''}${c.note ? ` <small>(${sym(c.note)})</small>` : ''}</li>`).join('')}</ul>` : ''}
+    <p class="hint keep">Przyczyna: ${r.tooSmall ? 'za mały przekrój dla sił (II rząd, ściskanie, rozstaw prętów)' : 'warunki zależne od wymiarów przekroju, betonu lub strzemion'}.${lockNote} „Dobierz wszystko” – najmniejszy przekrój z dobranym zbrojeniem spełniający wszystkie warunki.</p>
+    <div class="dbtn">${r.S && r.R ? '<button class="btn" id="cpBest">Przyjmij najlepsze zbrojenie mimo to</button>' : ''}<span style="flex:1"></span><button class="btn" id="cpClose">Zamknij</button><button class="btn pri" id="cpAll">⚙ Dobierz wszystko</button></div></div>`;
+  m.style.display = 'flex'; popRedraw = null;
+  $('#cpClose', m).onclick = closeModal;
+  $('#cpAll', m).onclick = () => { closeModal(); runDesign(true); };
+  const b = $('#cpBest', m); if (b) b.onclick = () => { closeModal(); applyResult(r.S, 'Przyjęto zbrojenie z doboru – nie wszystkie warunki są spełnione (Podsumowanie).'); };
 }
 function runDesign(withReb) {
   const sizes = E.dimCandidates(S); let i = 0, stop = false; const t0 = Date.now();
@@ -621,12 +698,11 @@ function schemeExtra(d, ci) {
   const oc = ci !== null && ci !== undefined && res[ci] ? res[ci] : res.reduce((a, q) => (q[d].u > a[d].u ? q : a));
   const ms = Dw.momentSeries(R, oc, d), n = ms.tot.length - 1;
   const mrdOf = RR => { const U2 = RR && RR.dirs && RR.dirs[d] && RR.dirs[d].U; if (!U2) return null; const out = []; for (let i = 0; i <= n; i++) { const N = oc.fr.Nat(i / n), v = U2.MRd(N, ms.tot[i] >= 0 ? 1 : -1); out.push(v === null || !isFinite(v) ? 0 : v / 1e6); } return out; };
-  if (R.lay.n) { o.mrd = mrdOf(R); o.cur = `${R.lay.n}⌀${R.lay.dmax}${R.lay.dmin !== R.lay.dmax ? '/' + R.lay.dmin : ''}`; }
   const a = dimSt.key === dimKey() ? dimSt.auto : null;
   if (!hasLoads()) return o;
   if (!a) o.prop = { pend: true };
   else if (!a.ok) o.prop = { err: true };
-  else { const L2 = a.R.lay; o.prop = { txt: `${L2.n}⌀${L2.dmax}${S.reb.fixD ? '' : ''}` }; if (!R.lay.n || JSON.stringify(a.R.lay.bars.map(b => [b.d, Math.round(b.x), Math.round(b.y)])) !== JSON.stringify(R.lay.bars.map(b => [b.d, Math.round(b.x), Math.round(b.y)]))) o.mrdP = mrdOf(a.R); }
+  else { const L2 = a.R.lay; o.prop = { txt: `${L2.n}⌀${L2.dmax}${L2.dmin !== L2.dmax ? '/' + L2.dmin : ''}` }; o.mrdP = mrdOf(a.R); }
   return o;
 }
 // wybór średnicy prętów (klik w opis zbrojenia na wykresie M): liczba prętów dobierana do średnicy, wszystkie warunki
@@ -665,7 +741,7 @@ function dselPopup() {
 // kliknięcie strzałki obciążenia na schemacie: lista obciążeń z tą składową (albo tabela sił obliczeniowych)
 function loadsPick(kind, dir) {
   if (S.loads.mode === 'direct') { const t = $('#dataside table.dt'); if (t) { t.scrollIntoView({ block: 'center' }); flash(t); } return; }
-  const key = kind === 'N' ? ['N', 'eh', 'eb'] : kind === 'H' ? [dir === 'y' ? 'Hh' : 'Hb'] : [dir === 'y' ? 'qh' : 'qb'];
+  const key = kind === 'N' || kind === 'Nz' ? ['N', 'eh', 'eb'] : kind === 'H' ? [dir === 'y' ? 'Hh' : 'Hb'] : [dir === 'y' ? 'qh' : 'qb'];
   const list = S.loads.items.map((it, i) => ({ it, i })).filter(q => key.some(k => q.it[k]));
   if (list.length === 1) return loadPopup(list[0].i);
   const m = $('#modal');
@@ -674,6 +750,114 @@ function loadsPick(kind, dir) {
   $('#lkClose', m).onclick = closeModal;
   $$('[data-lo]', m).forEach(b => b.onclick = () => loadPopup(+b.dataset.lo));
   $('#lkNew', m).onclick = () => { S.loads.items.push(E.normItem(E.newItem(kind === 'N' ? 'perm' : 'wind', { name: kind === 'N' ? 'Obciążenie stałe' : 'Wiatr', N: kind === 'N' ? 100 : 0, pm: kind !== 'N' }))); changed(false); loadPopup(S.loads.items.length - 1); };
+}
+// legenda obciążeń nad schematem: pole uwzględnij / pomiń przy każdym obciążeniu; ciężar własny wyłączony – wyszarzony „(pominięty)”
+function legendHTML() {
+  if (S.loads.mode === 'direct') return '';
+  const its = S.loads.items, KC = { perm: '#5d6778', imp: '#1d5bb8', snow: '#6a3fb5', wind: '#1d7f3c', other: '#a35d00' };
+  let ids = { perm: 0, var: 0 };
+  const chip = (k, on, lab, title, col) => `<span class="lgi ${on ? '' : 'off'}" title="${esc(title)}"><input type="checkbox" data-lgoff="${k}" ${on ? 'checked' : ''}><i style="background:${col}"></i><button class="lnk" data-lgopen="${k}">${lab}</button></span>`;
+  let h = chip('sw', S.loads.sw, `G₀ ciężar własny${S.loads.sw ? '' : ' (pominięty)'}`, S.loads.sw ? 'Ciężar własny słupa – odznacz, aby pominąć' : 'Ciężar własny pominięty – zaznacz, aby uwzględnić', '#39414f');
+  its.forEach((it, i) => { const id = it.kind === 'perm' ? 'G' + (++ids.perm) : 'Q' + (++ids.var); h += chip(i, !it.off, `${id} ${esc((it.name || KIND_N[it.kind]).slice(0, 26))}${it.off ? ' (pominięte)' : ''}`, `${KIND_N[it.kind]}: N = ${fmt(it.N, 1)} kN – kliknij nazwę, aby zmienić`, KC[it.kind] || '#5d6778'); });
+  if (S.above && S.above.length) h += `<span class="lgi" title="Obciążenia z kondygnacji wyżej"><i style="background:#9aa3b0"></i>z kondygnacji wyżej: ${fmt(S.above.reduce((a, q) => a + q.N, 0), 0)} kN</span>`;
+  return `<div class="legend">${h}<button class="btn sm" data-stool="add" title="Dodaj obciążenie">+ obciążenie</button></div>`;
+}
+// przyciski nad schematem i menu kontekstowe
+function schTool(k) {
+  if (k === 'dims') { schDims = !schDims; rendered.data = false; renderActive(); return; }
+  if (k === 'sup') return schPopup('y');
+  if (k === 'add') return colLoadPopup('y', Math.round(S.geom.L * 1000));
+  if (k === 'loads') return loadsListPopup();
+  if (k === 'sec') return secWinPopup();
+}
+function ctxMenu(x, y, items) {
+  let m = $('#ctxmenu'); if (!m) { m = document.createElement('div'); m.id = 'ctxmenu'; document.body.appendChild(m); }
+  m.innerHTML = items.map(([l], i) => `<button data-cm="${i}">${esc(l)}</button>`).join('');
+  m.style.display = 'block'; const r = m.getBoundingClientRect(); m.style.left = Math.min(x, window.innerWidth - r.width - 6) + 'px'; m.style.top = Math.min(y, window.innerHeight - r.height - 6) + 'px';
+  const close = () => { m.style.display = 'none'; document.removeEventListener('mousedown', out, true); document.removeEventListener('keydown', esc1, true); };
+  const out = e => { if (!e.target.closest('#ctxmenu')) close(); }, esc1 = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('mousedown', out, true); document.addEventListener('keydown', esc1, true);
+  $$('[data-cm]', m).forEach(b => b.onclick = () => { close(); items[+b.dataset.cm][1](); });
+}
+// okno obciążeń słupa: lista z polami uwzględnij / pomiń, edycja, dodawanie
+function loadsListPopup() {
+  const m = $('#modal');
+  const draw = () => {
+    const its = S.loads.items; let ids = { perm: 0, var: 0 };
+    m.innerHTML = `<div class="dlg"><h3>Obciążenia słupa (wartości charakterystyczne)</h3>
+      ${S.loads.mode === 'direct' ? '<p class="hint keep">Tryb sił obliczeniowych wprost – siły zadaje się w tabeli w zakładce Dane.</p>' : `<div class="tscroll"><table class="ldsum"><thead><tr><th></th><th></th><th>Nazwa</th><th>N [kN]</th><th>gdzie</th><th></th></tr></thead><tbody>
+      <tr class="${S.loads.sw ? '' : 'off'}"><td><input type="checkbox" data-lsw="1" ${S.loads.sw ? 'checked' : ''}></td><td><b>G₀</b></td><td>Ciężar własny słupa${S.loads.sw ? '' : ' (pominięty)'}</td><td class="n">${R && R.g ? fmt(R.g.selfW * R.g.L / 1e3, 1) : ''}</td><td>na wysokości</td><td></td></tr>
+      ${its.map((it, i) => `<tr class="${it.off ? 'off' : ''}"><td><input type="checkbox" data-loff2="${i}" ${it.off ? '' : 'checked'}></td><td><b>${it.kind === 'perm' ? 'G' + (++ids.perm) : 'Q' + (++ids.var)}</b></td><td>${esc(it.name || KIND_N[it.kind])}<small> · ${KIND_N[it.kind]}</small></td><td class="n">${fmt(it.N, 1)}</td><td>${it.zN !== '' && it.zN !== undefined ? `z = ${fmt(+it.zN, 2)} m` : 'głowica'}${it.eh || it.eb ? `, e = ${fmt(it.eh || 0, 0)} / ${fmt(it.eb || 0, 0)} mm` : ''}</td><td><button class="btn sm" data-led="${i}">Zmień…</button></td></tr>`).join('')}</tbody></table></div>`}
+      <div class="dbtn">${S.loads.mode === 'direct' ? '' : `<button class="btn" id="llAdd">+ obciążenie na słupie…</button>`}<span style="flex:1"></span><button class="btn pri" id="llClose">Zamknij</button></div></div>`;
+    $('#llClose', m).onclick = closeModal;
+    const a = $('#llAdd', m); if (a) a.onclick = () => colLoadPopup('y', Math.round(S.geom.L * 1000));
+    const sw = $('[data-lsw]', m); if (sw) sw.onchange = () => { S.loads.sw = sw.checked; changed(false); };
+    $$('[data-loff2]', m).forEach(cb => cb.onchange = () => { S.loads.items[+cb.dataset.loff2].off = !cb.checked; changed(false); });
+    $$('[data-led]', m).forEach(b => b.onclick = () => loadPopup(+b.dataset.led));
+  };
+  draw(); m.style.display = 'flex'; popRedraw = draw;
+}
+// okno „Przekrój” (z paska nad schematem): rysunek z klikalnymi strefami, wymiary, otulina, dobór
+function secWinPopup() {
+  const m = $('#modal');
+  const draw = () => {
+    if (!R || !R.g || R.errors.length) { m.innerHTML = `<div class="dlg sm">${errBox()}<div class="dbtn"><button class="btn pri" id="swClose">Zamknij</button></div></div>`; $('#swClose', m).onclick = closeModal; return; }
+    m.innerHTML = `<div class="dlg wide"><h3>Przekrój słupa – ${esc(shapeTxt(S))} mm ${dimBadge()}</h3>
+      <div class="flex" style="gap:12px;align-items:flex-start"><div class="secedit">${Dw.sectionSVG(R, { W: 360, H: 360, edit: true })}</div><div style="flex:1;min-width:240px">${secPropsHTML()}${dimSugHTML()}
+      <p class="hint keep">Kliknij bok przekroju (zbrojenie, otulina, wymiar i obciążenie tego boku), naroże, wnętrze (strzemiona), pas otuliny lub wymiar.</p>
+      <div class="dbtn" style="justify-content:flex-start;flex-wrap:wrap"><button class="btn sm" id="swDims">⚙ Dobierz przekrój</button><button class="btn sm" id="swReb">⚙ Dobierz zbrojenie</button><button class="btn sm pri" id="swAll">⚙ Dobierz wszystko</button><button class="btn sm" id="swGeo">Wymiary…</button><button class="btn sm" id="swCov">Otulina…</button><button class="btn sm" id="swAreas">Tablica A<sub>s</sub></button></div></div></div>
+      <div class="dbtn"><button class="btn pri" id="swClose">Zamknij</button></div></div>`;
+    $('#swClose', m).onclick = closeModal;
+    $('#swDims', m).onclick = () => { closeModal(); runDesign(false); }; $('#swReb', m).onclick = () => { closeModal(); doAutoReb(); }; $('#swAll', m).onclick = () => { closeModal(); runDesign(true); };
+    $('#swGeo', m).onclick = () => geoPopup(); $('#swCov', m).onclick = () => covPopup(); $('#swAreas', m).onclick = () => areasPopup();
+    $$('svg.secedit [data-z]', m).forEach(z => z.addEventListener('click', ev => { ev.stopPropagation(); zoneClick(z.dataset.z); }));
+    $$('[data-dsug]', m).forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); closeModal(); applyDimSug(); }));
+  };
+  draw(); m.style.display = 'flex'; popRedraw = draw;
+}
+// kliknięcie słupa na schemacie: dodanie obciążenia w tym miejscu (płaszczyzna schematu, wysokość kliknięcia)
+let colLd = { kind: 'perm', type: 'N' };
+function colLoadPopup(dir, z) {
+  if (S.loads.mode === 'direct') { toast('Tryb sił obliczeniowych wprost – siły zadaje się w tabeli po prawej (przełącz „Sposób zadania obciążeń”, aby dodawać obciążenia na schemacie).', 5000); return; }
+  const L = S.geom.L * 1000, pl = PL(dir), atTop = z >= L - 100, atBase = z <= 100;
+  const m = $('#modal');
+  const draw = () => {
+    const t = colLd.type;
+    const TY = [['N', 'Siła pionowa N (ściskająca, mimośrodowa)'], ['H', 'Siła pozioma H'], ['q', 'Obciążenie poziome q na całej wysokości'], ['M', 'Moment na końcu słupa (z analizy ramy)']];
+    const KD = [['perm', 'stałe (G)'], ['imp', 'użytkowe (Q)'], ['snow', 'śnieg (Q)'], ['wind', 'wiatr (Q, ±)'], ['other', 'inne zmienne']];
+    m.innerHTML = `<div class="dlg lpop"><h3>Obciążenie na słupie – płaszczyzna ${pl}${atTop ? ', głowica' : atBase ? ', podstawa' : `, z = ${fmt(z / 1000, 2)} m`}</h3>
+      <div class="seg wrap">${TY.map(([k, l]) => `<button data-cty="${k}" class="${t === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="fields" style="margin-top:8px">
+        <div class="row wide"><label>Rodzaj obciążenia</label><select id="clK">${KD.map(([k, l]) => `<option value="${k}" ${colLd.kind === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="row"><label>${t === 'N' ? 'N – wartość charakterystyczna (ściskanie +)' : t === 'H' ? `H_${pl} – wartość charakterystyczna (kierunek „+”)` : t === 'q' ? `q_${pl} – wartość charakterystyczna (kierunek „+”)` : `M_${dir} – wartość charakterystyczna`}</label><input class="txt n" id="clV" value="${esc(showNum(colLd.v !== undefined ? colLd.v : (t === 'N' ? 100 : t === 'q' ? 1 : 10)))}" inputmode="decimal"><span class="unit">${t === 'N' || t === 'H' ? 'kN' : t === 'q' ? 'kN/m' : 'kNm'}</span></div>
+        ${t === 'N' ? `<div class="row"><label>${sym(`mimośród e_${pl} (w płaszczyźnie ${pl})`)}</label><input class="txt n" id="clE" value="${esc(showNum(colLd.e !== undefined ? colLd.e : 0))}" inputmode="decimal"><span class="unit">mm</span></div>
+          <div class="row"><label>${sym(`mimośród e_${pl === 'h' ? 'b' : 'h'} (w drugiej płaszczyźnie)`)}</label><input class="txt n" id="clE2" value="${esc(showNum(colLd.e2 || 0))}" inputmode="decimal"><span class="unit">mm</span></div>` : ''}
+        ${t === 'N' || t === 'H' ? `<div class="row wide"><label>Miejsce przyłożenia</label><select id="clZ"><option value="top" ${colLd.top !== false || atTop ? 'selected' : ''}>w głowicy słupa</option>${atTop ? '' : `<option value="z" ${colLd.top === false && !atTop ? 'selected' : ''}>na wysokości kliknięcia z = ${fmt(z / 1000, 2)} m</option>`}</select></div>` : ''}
+        ${t === 'M' ? `<div class="row wide"><label>Koniec słupa</label><select id="clEnd"><option value="t" ${!atBase ? 'selected' : ''}>głowica</option><option value="b" ${atBase ? 'selected' : ''}>podstawa</option></select></div>` : ''}
+        <input class="txt" id="clNm" placeholder="nazwa (opcjonalnie)" value="${esc(colLd.name || '')}" style="width:100%;margin-top:6px">
+      </div>
+      <p class="hint keep">${t === 'N' ? 'Siła pionowa z mimośrodem daje moment N·e w miejscu przyłożenia (w głowicy – moment końcowy, na wysokości – moment skupiony, np. belka na wsporniku); poniżej miejsca przyłożenia siła podłużna rośnie o N.' : t === 'H' ? 'Siła pozioma skupiona – w głowicy (słup usztywniony przenosi ją na podporę) albo na wysokości kliknięcia.' : t === 'q' ? 'Obciążenie równomierne na całej wysokości słupa (np. parcie wiatru, parcie gruntu).' : 'Moment końcowy z analizy ramy (znak: M > 0 – rozciągana krawędź „−”).'} Po dodaniu otworzy się okno obciążenia ze wszystkimi polami.</p>
+      <div class="dbtn"><button class="btn" id="clSup">Warunki podparcia…</button><span style="flex:1"></span><button class="btn" id="clCan">Anuluj</button><button class="btn pri" id="clOk">Dodaj obciążenie</button></div></div>`;
+    $$('[data-cty]', m).forEach(b => b.onclick = () => { colLd.type = b.dataset.cty; colLd.v = undefined; draw(); });
+    $('#clK', m).onchange = e => { colLd.kind = e.target.value; };
+    const zs = $('#clZ', m); if (zs) zs.onchange = e => { colLd.top = e.target.value === 'top'; };
+    $('#clCan', m).onclick = closeModal; $('#clSup', m).onclick = () => schPopup(dir);
+    $('#clOk', m).onclick = () => {
+      const v = parseNum($('#clV', m).value); if (v === null) { $('#clV', m).classList.add('bad'); return; }
+      const kind = colLd.kind, nm0 = $('#clNm', m).value.trim(), n = S.loads.items.filter(i => i.kind === kind).length + 1;
+      const base = { perm: 'Obciążenie stałe', imp: 'Obciążenie użytkowe', snow: 'Śnieg', wind: 'Wiatr', other: 'Obciążenie zmienne' }[kind];
+      const o = { name: nm0 || (t === 'N' && colLd.top === false && !atTop ? `${base} – siła na wysokości ${fmt(z / 1000, 2)} m` : base + (n > 1 ? ' ' + n : '')), pm: kind === 'wind', N: 0 };
+      const ky = dir === 'y' ? 'h' : 'b', ko = dir === 'y' ? 'b' : 'h';
+      if (t === 'N') { o.N = v; o['e' + ky] = parseNum($('#clE', m).value) || 0; o['e' + ko] = parseNum($('#clE2', m).value) || 0; if (colLd.top === false && !atTop) o.zN = +(z / 1000).toFixed(3); }
+      else if (t === 'H') { o['H' + ky] = v; if (colLd.top === false && !atTop) o.zH = +(z / 1000).toFixed(3); }
+      else if (t === 'q') o['q' + ky] = v;
+      else { const end = $('#clEnd', m).value; o[(dir === 'y' ? 'My' : 'Mz') + end] = v; }
+      colLd.v = v; colLd.name = '';
+      S.loads.items.push(E.normItem(E.newItem(kind, o))); changed(false); loadPopup(S.loads.items.length - 1);
+    };
+  };
+  if (colLd.top === undefined) colLd.top = true;
+  draw(); m.style.display = 'flex'; popRedraw = null;
 }
 // podsumowanie obciążeń pod schematem: suma N charakterystycznych, obliczeniowe max/min
 function loadSumHTML() {
@@ -701,13 +885,15 @@ function renderDataSide() {
   const res = R.res || [];
   const ci = selCombo;
   const comboSel = `<select id="dsCombo" class="cmbsel" title="Kombinacja pokazana na schemacie"><option value="">kombinacja decydująca (dla każdej płaszczyzny)</option>${res.map((q, i) => `<option value="${i}" ${ci === i ? 'selected' : ''}>${esc(q.c.name)}</option>`).join('')}</select>`;
-  let h = colTabsHTML();
+  let h = colTabsHTML() + stackBoxHTML();
   const SD = [['M', 'M + pręty', 'Momenty M_Ed i nośność M_Rd; opis – zbrojenie wymagane z doboru (kliknij, aby wybrać średnicę)'], ['V', 'V + strzemiona', 'Siła poprzeczna i strefy strzemion'], ['N', 'N', 'Siła podłużna'], ['R', 'reakcje', 'Reakcje podpór – siły na fundament'], ['buck', 'wyboczenie', 'Postać wyboczenia i długość l₀'], ['none', 'bez wykresu', 'Tylko schemat i obciążenia']];
-  h += `<div class="box"><div class="schhead"><h4>Schemat statyczny i siły obliczeniowe</h4><div class="seg">${SD.map(([k, l, t]) => `<button class="${schDiag === k ? 'on' : ''}" data-sd="${k}" title="${esc(t)}">${l}</button>`).join('')}</div></div>${comboSel}
-    <div class="schpair">${['y', 'z'].map(d => `<div class="schemewrap">${Dw.schemeSVG(R, S, d, Object.assign({ W, H: 470, diag: schDiag, combo: ci === null ? undefined : ci }, schemeExtra(d, ci)))}</div>`).join('')}</div>
+  h += `<div class="box"><div class="schhead"><h4>Schemat statyczny i siły obliczeniowe</h4><div class="schtools"><button class="btn sm" data-stool="loads" title="Okno obciążeń słupa (lista, edycja, dodawanie)">Obciążenia</button><button class="btn sm" data-stool="sec" title="Okno przekroju: wymiary, otulina, zbrojenie, dobór">Przekrój</button><button class="btn sm" data-stool="sup" title="Warunki podparcia i długość wyboczeniowa">Podparcie</button><button class="btn sm ${schDims ? 'on' : ''}" data-stool="dims" title="Pokaż / ukryj linie wymiarowe">Wymiary</button></div></div>
+    ${legendHTML()}
+    <div class="schpair" id="schPair">${['y', 'z'].map(d => `<div class="schemewrap">${Dw.schemeSVG(R, S, d, Object.assign({ W, H: 470, diag: schDiag, combo: ci === null ? undefined : ci, dims: schDims, cls: S.mat.concrete, sec: shapeTxt(S) }, schemeExtra(d, ci)))}</div>`).join('')}</div>
+    <div class="schunder"><div class="seg">${SD.map(([k, l, t]) => `<button class="${schDiag === k ? 'on' : ''}" data-sd="${k}" title="${esc(t)}">${l}</button>`).join('')}</div>${comboSel}</div>
     ${loadSumHTML()}
     ${schDiag === 'R' ? reacTableHTML(ci) : ''}
-    <p class="hint">Kliknij podporę lub słup, aby zmienić warunki podparcia i długość wyboczeniową w danej płaszczyźnie; strzałkę obciążenia – aby zmienić obciążenie; opis zbrojenia na wykresie M – aby wybrać średnicę prętów; strefę strzemion (widok V) – aby zmienić strzemiona. Wartości – siły obliczeniowe wybranej kombinacji; M<sub>Ed</sub> z imperfekcją e<sub>i</sub> i efektami II rzędu. Ctrl + kółko – powiększenie.</p></div>`;
+    <p class="hint">Kliknij słup, aby dodać obciążenie w tym miejscu; podporę – warunki podparcia i długość wyboczeniową; strzałkę obciążenia – aby je zmienić; opis zbrojenia wymaganego – wybór średnicy; strefę strzemion (widok V) – rozstaw i długość strefy. Prawy przycisk myszy na schemacie – menu. Wartości – siły obliczeniowe wybranej kombinacji; M<sub>Ed</sub> z imperfekcją e<sub>i</sub> i efektami II rzędu. Ctrl + kółko – powiększenie.</p></div>`;
   h += `<div class="box"><div class="schhead"><h4>Przekrój ${dimBadge()}</h4><span class="hint keep" style="margin:0">kliknij przekrój – zbrojenie, wymiary</span></div><div class="minisec2">${Dw.sectionSVG(R, { W: 220, H: 220, small: true, edit: true })}<div>${secPropsHTML()}${dimSugHTML()}</div></div></div>`;
   h += S.loads.mode === 'cases' ? loadTableHTML() : directTableHTML();
   h += combosBoxHTML();
@@ -726,11 +912,13 @@ function loadTableHTML() {
   const rows = its.map((it, i) => {
     const id = it.off ? '–' : it.kind === 'perm' ? 'G' + (++ids.perm) : 'Q' + (++ids.var);
     const Ms = [[it.Myt, it.Myb], [it.Mzt, it.Mzb]].map(([a, b]) => a || b ? `${v(a)} / ${v(b)}` : '').join('</td><td>');
-    const Hs = [it.Hh ? `H<sub>h</sub> ${v(it.Hh)}` : '', it.Hb ? `H<sub>b</sub> ${v(it.Hb)}` : '', it.qh ? `q<sub>h</sub> ${v(it.qh, 2)}` : '', it.qb ? `q<sub>b</sub> ${v(it.qb, 2)}` : '', it.eh ? `e<sub>h</sub> ${v(it.eh, 0)}` : '', it.eb ? `e<sub>b</sub> ${v(it.eb, 0)}` : ''].filter(Boolean).join(', ');
+    const zt = k => it[k] !== '' && it[k] !== undefined ? ` @ ${fmt(+it[k], 2)} m` : '';
+    const Hs = [it.zN !== '' && it.zN !== undefined && it.N ? `N na z = ${fmt(+it.zN, 2)} m` : '', it.Hh ? `H<sub>h</sub> ${v(it.Hh)}${zt('zH')}` : '', it.Hb ? `H<sub>b</sub> ${v(it.Hb)}${zt('zH')}` : '', it.qh ? `q<sub>h</sub> ${v(it.qh, 2)}` : '', it.qb ? `q<sub>b</sub> ${v(it.qb, 2)}` : '', it.eh ? `e<sub>h</sub> ${v(it.eh, 0)}` : '', it.eb ? `e<sub>b</sub> ${v(it.eb, 0)}` : ''].filter(Boolean).join(', ');
     return `<tr data-openload="${i}" class="${it.off ? 'off' : ''}"><td><input type="checkbox" data-loff="${i}" ${it.off ? '' : 'checked'} title="uwzględnij w obliczeniach"></td><td><b>${id}</b></td><td>${esc(it.name || '(bez nazwy)')}<small> · ${KIND_N[it.kind]}${it.kind === 'imp' ? ' ' + it.cat : ''}${it.pm ? ' ±' : ''}</small></td><td class="n">${v(it.N)}</td><td class="n">${Ms}</td><td class="hs">${Hs}</td></tr>`;
   }).join('');
   return `<div class="box"><div class="schhead"><h4>Zestawienie obciążeń (wartości charakterystyczne)</h4></div>
     <div class="tscroll"><table class="ldsum lt"><thead><tr><th></th><th></th><th>Nazwa</th><th>N [kN]</th><th>M<sub>y</sub> góra / dół [kNm]</th><th>M<sub>z</sub> góra / dół [kNm]</th><th>poziome [kN, kN/m, mm]</th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="lnone">Brak obciążeń – dodaj je przyciskami poniżej albo <button class="lnk" data-example="1">wczytaj przykład</button>.</td></tr>'}</tbody></table></div>
+    ${STACK && S.above && S.above.length ? `<p class="hint keep"><b>Z kondygnacji wyżej (w głowicy, charakterystyczne):</b> ${S.above.map(q => `${esc(q.name || KIND_N[q.kind])} ${fmt(q.N, 1)} kN <small>(${esc(q.from)})</small>`).join('; ')} – łączone z obciążeniami tej kondygnacji o tej samej nazwie i rodzaju.</p>` : ''}
     <div class="addbar">${[['perm', '+ stałe'], ['imp', '+ użytkowe'], ['snow', '+ śnieg'], ['wind', '+ wiatr'], ['other', '+ inne zmienne']].map(([k, l]) => `<button class="btn sm" data-addl="${k}">${l}</button>`).join('')}</div>
     <p class="hint">Znak momentu: M &gt; 0 – rozciągana krawędź „−” (lewa na schemacie). Momenty tego samego znaku na obu końcach – słup wygięty jednokierunkowo (najniekorzystniej). Siły H, q i mimośród e &gt; 0 – w kierunku „+”. Kliknij wiersz, aby edytować.</p></div>`;
 }
@@ -750,10 +938,16 @@ function bindDataSide(el) {
   $$('[data-dsel]', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); dselPopup(); }));
   $$('.schemesvg .mhit', el).forEach(r => r.addEventListener('click', ev => { const svg = r.closest('svg'), bb = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal, py = vb.y + (ev.clientY - bb.top) * vb.height / bb.height, mt = +svg.dataset.mt, hh = +svg.dataset.hh, L = +svg.dataset.l; const z = Math.max(0, Math.min(L, (1 - (py - mt) / hh) * L)); zSecPopup(Math.round(z / 10) * 10); }));
   $$('[data-ld]', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); loadsPick(g.dataset.ld, g.closest('svg').dataset.dir); }));
-  $$('.schemesvg [data-tz]', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); tiePopup(); }));
+  $$('.schemesvg [data-tz]', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); stirZonePopup(g.dataset.tz); }));
+  // pasek nad schematem, legenda obciążeń (uwzględnij / pomiń), menu pod prawym przyciskiem
+  $$('[data-stool]', el).forEach(b => b.addEventListener('click', () => schTool(b.dataset.stool)));
+  $$('[data-lgoff]', el).forEach(cb => cb.addEventListener('change', () => { const k = cb.dataset.lgoff; if (k === 'sw') S.loads.sw = cb.checked; else { const it = S.loads.items[+k]; if (it) it.off = !cb.checked; } changed(false); }));
+  $$('[data-lgopen]', el).forEach(b => b.addEventListener('click', () => { const k = b.dataset.lgopen; if (k === 'sw') { S.loads.sw = !S.loads.sw; changed(false); } else loadPopup(+k); }));
+  const sp = $('#schPair', el); if (sp) sp.addEventListener('contextmenu', ev => { ev.preventDefault(); const svg = ev.target.closest('svg.schemesvg'); let z = null, dir = svg ? svg.dataset.dir : 'y'; if (svg) { const bb = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal, py = vb.y + (ev.clientY - bb.top) * vb.height / bb.height; z = Math.max(0, Math.min(+svg.dataset.l, (1 - (py - +svg.dataset.mt) / +svg.dataset.hh) * +svg.dataset.l)); } ctxMenu(ev.clientX, ev.clientY, [['Dodaj obciążenie w tym miejscu…', () => colLoadPopup(dir, Math.round((z === null ? S.geom.L * 1000 : z) / 50) * 50)], ['Obciążenia…', () => schTool('loads')], ['Przekrój…', () => schTool('sec')], [`Warunki podparcia – płaszczyzna ${PL(dir)}…`, () => schPopup(dir)], ...(z !== null && R && R.lay && R.lay.n ? [[`Przekrój i siły na wysokości ${fmt(z / 1000, 2)} m…`, () => zSecPopup(Math.round(z / 10) * 10)]] : []), [schDims ? 'Ukryj wymiary' : 'Pokaż wymiary', () => schTool('dims')]]); });
   $$('[data-dsug]', el).forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); applyDimSug(); }));
   const cs = $('#dsCombo', el); if (cs) cs.onchange = () => { selCombo = cs.value === '' ? null : +cs.value; rendered = {}; renderActive(); };
   $$('[data-sch]', el).forEach(g => g.addEventListener('click', () => schPopup(g.dataset.sch)));
+  $$('.schemesvg .schcol', el).forEach(r => r.addEventListener('click', ev => { const svg = r.closest('svg'), bb = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal, py = vb.y + (ev.clientY - bb.top) * vb.height / bb.height, mt = +svg.dataset.mt, hh = +svg.dataset.hh, L = +svg.dataset.l; const z = Math.max(0, Math.min(L, (1 - (py - mt) / hh) * L)); colLoadPopup(r.dataset.col, Math.round(z / 50) * 50); }));
   $$('.minisec2 svg', el).forEach(s => s.addEventListener('click', () => rebPopup()));
   $$('[data-openload]', el).forEach(tr => tr.addEventListener('click', e => { if (e.target.closest('input')) return; loadPopup(+tr.dataset.openload); }));
   $$('[data-loff]', el).forEach(cb => cb.addEventListener('change', () => { S.loads.items[+cb.dataset.loff].off = !cb.checked; changed(false); }));
@@ -786,7 +980,7 @@ async function loadExample() {
 // zbrojenie wymagane dla przekroju bez zbrojenia (najmniejsza masa stali spełniająca wszystkie warunki) – liczone na żądanie, pamiętane
 let reqCache = { key: '', r: null };
 const reqKey = () => JSON.stringify([S.geom, S.buck, S.mat, S.env, S.loads, S.sec2, S.sls, S.stir, S.det, S.fire, S.coef, S.reb.fixD, S.design]);
-const hasLoads = () => S.loads.mode === 'direct' ? S.loads.direct.some(r => !r.off) : S.loads.items.some(i => !i.off);
+const hasLoads = () => S.loads.mode === 'direct' ? S.loads.direct.some(r => !r.off) : (S.loads.items.some(i => !i.off) || (S.above || []).some(q => q.N));
 function reqRebHTML() {
   if (!hasLoads()) return '<div class="msg wrn">Przekrój bez zbrojenia i bez obciążeń. Dodaj obciążenia w zakładce Dane (albo wczytaj przykład) – program pokaże tu zbrojenie wymagane; możesz też zadać pręty ręcznie.</div>';
   return `<div class="msg wrn reqreb" id="reqReb">Przekrój bez zbrojenia podłużnego – obliczanie zbrojenia wymaganego…</div>`;
@@ -831,7 +1025,7 @@ function fieldPopup(title, items, gid, extra, cls) {
   draw(); m.style.display = 'flex';
 }
 function rebPopup() { fieldPopup('Zbrojenie podłużne', POP.reb, 'reb', () => `<div class="rbprev"></div><div class="dbtn" style="justify-content:flex-start"><button class="btn sm" id="rbAuto">⚙ Dobierz zbrojenie</button><button class="btn sm" id="rbClr">Wyczyść zbrojenie</button></div>`, 'rebpop');
-  const bind = () => { const a = $('#rbAuto'); if (a) a.onclick = () => { closeModal(); doAutoReb(); }; const c = $('#rbClr'); if (c) c.onclick = () => { S.reb.set = false; closeModal(); changed(true); }; };
+  const bind = () => { const a = $('#rbAuto'); if (a) a.onclick = () => { closeModal(); doAutoReb(); }; const c = $('#rbClr'); if (c) c.onclick = () => { closeModal(); clearReb(); }; };
   bind(); const pr = popRedraw; popRedraw = () => { pr(); bind(); };
   if (!S.reb.set) { S.reb.set = true; changed(false); }
 }
@@ -845,6 +1039,7 @@ function loadPopup(i) {
   const it = S.loads.items[i]; if (!it) return;
   const m = $('#modal');
   const f = (k, l, u, w) => `<div class="row"><label>${sym(l)}</label><input class="txt n" data-lk="${k}" value="${esc(showNum(it[k]))}" inputmode="decimal"><span class="unit">${u || ''}</span></div>`;
+  const fz = (k, l) => `<div class="row"><label>${sym(l)}</label><input class="txt n" data-lz="${k}" value="${esc(showNum(it[k]))}" placeholder="głowica" inputmode="decimal"><span class="unit">m</span></div>`;
   const draw = () => {
     m.innerHTML = `<div class="dlg lpop"><h3>Obciążenie – ${esc(it.name || KIND_N[it.kind])}</h3><div class="fields">
       <div class="row wide"><label>Nazwa</label><input class="txt" data-lk="name" value="${esc(it.name)}"></div>
@@ -854,15 +1049,16 @@ function loadPopup(i) {
       ${it.kind === 'other' ? f('p0', 'ψ₀') + f('p1', 'ψ₁') + f('p2', 'ψ₂') : ''}
       ${it.kind !== 'perm' ? `<label class="chk"><input type="checkbox" data-lchk="pm" ${it.pm ? 'checked' : ''}> obciążenie dwukierunkowe (± – np. wiatr): kombinacje z oboma znakami</label>` : ''}
       ${it.kind !== 'perm' ? `<p class="hint">ψ₀ = ${fmt(E.psiOf(it).p0, 2)}, ψ₁ = ${fmt(E.psiOf(it).p1, 2)}, ψ₂ = ${fmt(E.psiOf(it).p2, 2)}</p>` : ''}
-      <div class="lsub">Siła podłużna w głowicy</div>${f('N', 'N (ściskanie +)', 'kN')}${tribHTML(it)}${f('eh', 'mimośród e_h (w płaszczyźnie h)', 'mm')}${f('eb', 'mimośród e_b (w płaszczyźnie b)', 'mm')}
+      <div class="lsub">Siła pionowa (ściskanie +), mimośrodowa</div>${f('N', 'N (ściskanie +)', 'kN')}${tribHTML(it)}${f('eh', 'mimośród e_h (w płaszczyźnie h)', 'mm')}${f('eb', 'mimośród e_b (w płaszczyźnie b)', 'mm')}${fz('zN', 'wysokość przyłożenia z_N od podstawy (puste – głowica)')}
       <div class="lsub">Momenty na końcach (z analizy ramy)</div>${f('Myt', 'M_y – głowica', 'kNm')}${f('Myb', 'M_y – podstawa', 'kNm')}${f('Mzt', 'M_z – głowica', 'kNm')}${f('Mzb', 'M_z – podstawa', 'kNm')}
-      <div class="lsub">Obciążenia poziome</div>${f('Hh', 'H_h – siła w głowicy (płaszczyzna h)', 'kN')}${f('Hb', 'H_b – siła w głowicy (płaszczyzna b)', 'kN')}${f('qh', 'q_h – na wysokości (płaszczyzna h)', 'kN/m')}${f('qb', 'q_b – na wysokości (płaszczyzna b)', 'kN/m')}
+      <div class="lsub">Obciążenia poziome</div>${f('Hh', 'H_h – siła skupiona (płaszczyzna h)', 'kN')}${f('Hb', 'H_b – siła skupiona (płaszczyzna b)', 'kN')}${fz('zH', 'wysokość siły H z_H od podstawy (puste – głowica)')}${f('qh', 'q_h – na wysokości (płaszczyzna h)', 'kN/m')}${f('qb', 'q_b – na wysokości (płaszczyzna b)', 'kN/m')}
       <p class="hint">Momenty od obciążeń poziomych i mimośrodu liczone są w schemacie podparcia słupa (zakładka Dane, schemat). Siła H w głowicy słupa usztywnionego przechodzi na podporę (bez momentów).</p>
       </div><div class="dbtn"><button class="btn dng" id="lpDel">Usuń obciążenie</button><span style="flex:1"></span><button class="btn pri" id="lpOk">Zamknij</button></div></div>`;
     $$('[data-lk]', m).forEach(inp => inp.addEventListener('input', () => {
       const k = inp.dataset.lk; if (k === 'name') { it.name = inp.value; changed(false); return; }
       const raw = inp.value.trim(), v = raw === '' ? 0 : parseNum(raw); const bad = v === null || (/^p[012]$/.test(k) && (v < 0 || v > 1)); inp.classList.toggle('bad', bad); if (bad) return; it[k] = v; changed(false);
     }));
+    $$('[data-lz]', m).forEach(inp => inp.addEventListener('input', () => { const k = inp.dataset.lz, raw = inp.value.trim(); if (raw === '') { it[k] = ''; inp.classList.remove('bad'); changed(false); return; } const v = parseNum(raw), bad = v === null || v < 0 || v > S.geom.L; inp.classList.toggle('bad', bad); if (bad) return; it[k] = v >= S.geom.L - 1e-6 ? '' : v; changed(false); }));
     $$('[data-lsel]', m).forEach(sl => sl.addEventListener('change', () => { it[sl.dataset.lsel] = sl.value; if (sl.dataset.lsel === 'kind') it.pm = sl.value === 'wind'; changed(false); draw(); }));
     $$('[data-lchk]', m).forEach(cb => cb.addEventListener('change', () => { it[cb.dataset.lchk] = cb.checked; changed(false); }));
     bindTrib(m, it, draw);
@@ -956,7 +1152,7 @@ function renderSection(el) {
   $('#sbGeo', el).onclick = () => geoPopup();
   $('#sbCov', el).onclick = () => covPopup();
   $('#sbAreas', el).onclick = () => areasPopup();
-  $('#sbClr', el).onclick = () => { S.reb.set = false; changed(true); };
+  $('#sbClr', el).onclick = () => clearReb();
   $$('[data-z]', el).forEach(z => z.addEventListener('click', ev => { ev.stopPropagation(); zoneClick(z.dataset.z); }));
   $$('[data-face]', el).forEach(tr => tr.addEventListener('click', () => zoneClick(tr.dataset.face)));
   const vo = $('#vibOn', el), vd = $('#vibD', el);
@@ -987,7 +1183,8 @@ function zoneClick(z) {
   if (z === 'dims') return geoPopup();
   if (z === 'cov') return covPopup();
   if (z === 'corner') return cornerPopup();
-  if (z.startsWith('f:')) return facePopup(z.slice(2));
+  if (z.startsWith('f:')) return facePopup(z.slice(2), 'reb');
+  if (z.startsWith('cv:')) return facePopup(z.slice(3), 'cov');
   if (z.startsWith('e:')) return edgePopup(+z.slice(2));
   if (z.startsWith('ring:')) return ringPopup(z.slice(5));
 }
@@ -1007,22 +1204,68 @@ function miniPop(title, body, onBind, opts) {
   draw(); m.style.display = 'flex'; popRedraw = draw;
 }
 const selHTML = (id, opts, cur) => `<select id="${id}">${opts.map(([v, l]) => `<option value="${esc(v)}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
-function facePopup(k) {
-  if (!S.reb.set) { S.reb.set = true; }
-  ensurePF(); changed(false);
-  miniPop(`Bok ${E.FACE_N[k]} przekroju – pręty pośrednie`, () => {
-    const f = S.reb.fc[k], L = R && R.lay && R.lay.faces && R.lay.faces[k];
-    return `<div class="fields"><div class="row"><label>Liczba prętów pośrednich na boku (bez narożnych)</label>${selHTML('fpN', rng(0, 14, 1).map(v => [v, String(v)]), f.n)}<span></span></div>
-      <div class="row"><label>Średnica prętów pośrednich</label>${selHTML('fpD', E.MAIN_DIAS.map(d => [d, '⌀' + d]), f.d)}<span></span></div>
-      <div class="row wide"><label>Zmiana dotyczy</label><div class="seg">${[['one', 'tylko tego boku'], ['opp', 'tego i przeciwległego'], ['all', 'wszystkich boków']].map(([v, l]) => `<button data-fa="${v}" class="${faceApply === v ? 'on' : ''}">${l}</button>`).join('')}</div></div></div>
-      <div class="hint keep">${L ? `Bok ${E.FACE_N[k]}: ${L.nm ? `${L.nm}⌀${L.d} + 2 pręty narożne ⌀${S.reb.dc}` : `tylko pręty narożne ⌀${S.reb.dc}`}; rozstaw osiowy ${fmt(L.ctc, 0)} mm, w świetle ${fmt(L.clear, 0)} mm (wymagane ≥ ${fmt(R.lay.smin, 0)} mm${L.clear < R.lay.smin - 0.5 ? ' – <b style="color:var(--fail)">za mało</b>' : ''})${L.far > 150 ? `; pręt w odległości ${fmt(L.far, 0)} mm od utrzymanego – szpilki: zakładka Strzemiona` : ''}.` : ''} Średnicę prętów narożnych zmienisz, klikając naroże przekroju.</div>`;
+// okno boku przekroju (prostokąt): zbrojenie boku, otulina boku, wymiar, obciążenie przyłożone do boku
+let faceTab = 'reb';
+const FACE_PL = { top: ['y', 1, 'h'], bot: ['y', -1, 'h'], lft: ['z', 1, 'b'], rgt: ['z', -1, 'b'] };   // płaszczyzna, znak kierunku „+” (krawędź „+”: górna / lewa), wymiar
+let faceLd = { kind: 'perm', type: 'N', v: 100, e: '', kindH: 'wind' };
+function facePopup(k, tab) {
+  if (tab) faceTab = tab;
+  const [dir, sgn, dimK] = FACE_PL[k];
+  miniPop(`Bok ${E.FACE_N[k]} przekroju`, () => {
+    const t = faceTab, L = R && R.lay && R.lay.faces && R.lay.faces[k];
+    let h = `<div class="seg wrap" style="margin-bottom:8px">${[['reb', 'Zbrojenie boku'], ['cov', 'Otulina boku'], ['dim', `Wymiar ${dimK}`], ['load', 'Obciążenie na boku']].map(([q, l]) => `<button data-ftab="${q}" class="${t === q ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    if (t === 'reb') {
+      const f = S.reb.pf && S.reb.fc ? S.reb.fc[k] : E.rectFaces(S)[k];
+      h += `<div class="fields"><div class="row"><label>Liczba prętów pośrednich na boku (bez narożnych)</label>${selHTML('fpN', rng(0, 14, 1).map(v => [v, String(v)]), f.n)}<span></span></div>
+        <div class="row"><label>Średnica prętów pośrednich</label>${selHTML('fpD', E.MAIN_DIAS.map(d => [d, '⌀' + d]), f.d)}<span></span></div>
+        <div class="row wide"><label>Zmiana dotyczy</label><div class="seg">${[['one', 'tylko tego boku'], ['opp', 'tego i przeciwległego'], ['all', 'wszystkich boków']].map(([v, l]) => `<button data-fa="${v}" class="${faceApply === v ? 'on' : ''}">${l}</button>`).join('')}</div></div></div>
+        <div class="hint keep">${L ? `Bok ${E.FACE_N[k]}: ${L.nm ? `${L.nm}⌀${L.d} + 2 pręty narożne ⌀${S.reb.dc}` : `tylko pręty narożne ⌀${S.reb.dc}`}; rozstaw osiowy ${fmt(L.ctc, 0)} mm, w świetle ${fmt(L.clear, 0)} mm (wymagane ≥ ${fmt(R.lay.smin, 0)} mm${L.clear < R.lay.smin - 0.5 ? ' – <b style="color:var(--fail)">za mało</b>' : ''})${L.far > 150 ? `; pręt w odległości ${fmt(L.far, 0)} mm od utrzymanego – szpilki: okno Strzemiona` : ''}.` : ''} Średnicę prętów narożnych zmienisz, klikając naroże przekroju. <button class="lnk" id="fpSym">jak bok przeciwległy</button></div>`;
+    } else if (t === 'cov') {
+      const v = S.env.cf ? S.env.cf[k] : 'auto', req = R && R.cov ? R.cov.reqR : 0, cn = R && R.cov ? R.cov.cnom : 0;
+      h += `<div class="fields"><div class="row"><label>Otulina boku ${E.FACE_N[k]} c<sub>nom</sub> (do strzemion)</label><div class="combo"><input id="fcC" value="${v === 'auto' ? '' : esc(showNum(v))}" placeholder="auto ${cn}" autocomplete="off"><button tabindex="-1" data-list='["", 20, 25, 30, 35, 40, 45, 50, 60, 70, 80]' aria-label="lista">▾</button></div><span class="unit">mm</span></div></div>
+        <div class="hint keep">Puste pole – otulina jak dla całego przekroju (c<sub>nom</sub> = ${cn} mm; wymagana ${req} mm). Większa otulina na jednym boku – np. ściana zewnętrzna, odporność ogniowa z jednej strony, beton układany na gruncie. Mniejsza od wymaganej – warunek niespełniony (Podsumowanie). <button class="lnk" id="fcAll">otulina całego przekroju…</button></div>`;
+    } else if (t === 'dim') {
+      const v = S.geom[dimK];
+      h += `<div class="fields"><div class="row"><label>Wymiar ${dimK} (${dimK === 'b' ? 'długość boków górnego i dolnego' : 'długość boków lewego i prawego'})</label><div class="combo"><input id="fdV" value="${esc(showNum(v))}" autocomplete="off" inputmode="decimal"><button tabindex="-1" data-list='[250, 300, 350, 400, 450, 500, 600, 700, 800, 1000]' aria-label="lista">▾</button></div><span class="unit">mm</span></div></div>
+        <div class="hint keep">Bok ${E.FACE_N[k]} ma długość ${dimK} = ${v} mm. Zmiana wymiaru przelicza rozstaw prętów na bokach, nośność i smukłość; ✔/✖/? przy przekroju (Dane) ocenia, czy wymiary wystarczają.</div>`;
+    } else {
+      const dep = dimK === 'b' ? S.geom.b : S.geom.h, eDef = dep / 2;
+      const KD = [['perm', 'stałe (G)'], ['imp', 'użytkowe (Q)'], ['snow', 'śnieg (Q)'], ['wind', 'wiatr (Q, ±)'], ['other', 'inne zmienne']];
+      h += `<div class="seg wrap" style="margin-bottom:6px">${[['N', 'Siła pionowa na krawędzi boku (mimośrodowa)'], ['q', 'Parcie poziome na bok (q na wysokości)'], ['H', 'Siła pozioma na bok (H)']].map(([q, l]) => `<button data-fl="${q}" class="${faceLd.type === q ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="fields"><div class="row wide"><label>Rodzaj obciążenia</label>${selHTML('flK', KD, faceLd.type === 'N' ? faceLd.kind : faceLd.kindH)}</div>
+        <div class="row"><label>${faceLd.type === 'N' ? 'N – wartość charakterystyczna (ściskanie)' : faceLd.type === 'q' ? 'q – parcie na bok' : 'H – siła na bok'}</label><input class="txt n" id="flV" value="${esc(showNum(faceLd.v))}" inputmode="decimal"><span class="unit">${faceLd.type === 'q' ? 'kN/m' : 'kN'}</span></div>
+        ${faceLd.type === 'N' ? `<div class="row"><label>Mimośród od osi słupa w stronę boku e</label><input class="txt n" id="flE" value="${esc(showNum(faceLd.e))}" placeholder="${showNum(eDef)} (krawędź)" inputmode="decimal"><span class="unit">mm</span></div><div class="row"><label>Wysokość przyłożenia z od podstawy (puste – głowica)</label><input class="txt n" id="flZ" value="${esc(showNum(faceLd.z || ''))}" placeholder="głowica" inputmode="decimal"><span class="unit">m</span></div>` : ''}
+        ${faceLd.type === 'H' ? `<div class="row"><label>Wysokość przyłożenia z od podstawy (puste – głowica)</label><input class="txt n" id="flZ" value="${esc(showNum(faceLd.z || ''))}" placeholder="głowica" inputmode="decimal"><span class="unit">m</span></div>` : ''}</div>
+        <div class="hint keep">${faceLd.type === 'N' ? `Siła pionowa przyłożona po stronie boku ${E.FACE_N[k]} (np. belka lub strop oparta na wsporniku / krawędzi słupa): mimośród e<sub>${dimK}</sub> = ${sgn > 0 ? '+' : '−'}e (w płaszczyźnie ${PL(dir)}), domyślnie krawędź słupa (${showNum(eDef)} mm).` : `Obciążenie poziome działające na bok ${E.FACE_N[k]}, skierowane do wnętrza przekroju (płaszczyzna ${PL(dir)}, znak ${sgn > 0 ? '−' : '+'}).`} Po dodaniu otworzy się okno obciążenia.</div>
+        <div class="dbtn" style="justify-content:flex-start"><button class="btn pri" id="flAdd">Dodaj obciążenie na ten bok</button></div>`;
+    }
+    return h;
   }, m => {
+    $$('[data-ftab]', m).forEach(b => b.onclick = () => { faceTab = b.dataset.ftab; popRedraw(); });
     const tg = () => faceApply === 'all' ? E.FACES : faceApply === 'opp' ? [k, OPP[k]] : [k];
-    $('#fpN', m).onchange = e => { tg().forEach(q => { S.reb.fc[q].n = +e.target.value; }); changed(false); };
-    $('#fpD', m).onchange = e => { tg().forEach(q => { S.reb.fc[q].d = +e.target.value; }); changed(false); };
+    const prep = () => { if (!S.reb.set) S.reb.set = true; ensurePF(); };
+    const fn = $('#fpN', m); if (fn) fn.onchange = e => { prep(); tg().forEach(q => { S.reb.fc[q].n = +e.target.value; }); changed(false); };
+    const fd = $('#fpD', m); if (fd) fd.onchange = e => { prep(); tg().forEach(q => { S.reb.fc[q].d = +e.target.value; }); changed(false); };
     $$('[data-fa]', m).forEach(b => b.onclick = () => { faceApply = b.dataset.fa; $$('[data-fa]', m).forEach(x => x.classList.toggle('on', x === b)); });
-    const sy = $('#fpSym', m); if (sy) sy.onclick = () => { S.reb.fc[k] = Object.assign({}, S.reb.fc[OPP[k]]); changed(false); };
-  }, { extra: () => `<button class="btn" id="fpSym" title="Przyjmij na tym boku zbrojenie boku przeciwległego">Jak bok przeciwległy</button>` });
+    const sy = $('#fpSym', m); if (sy) sy.onclick = () => { prep(); S.reb.fc[k] = Object.assign({}, S.reb.fc[OPP[k]]); changed(false); };
+    const numCombo = (inp, apply) => { if (!inp) return; const ap = () => apply(inp.value.trim()); inp.addEventListener('change', ap); inp.addEventListener('keydown', e => { if (e.key === 'Enter') ap(); }); const btn = inp.nextElementSibling; if (btn) btn.addEventListener('mousedown', e => { e.preventDefault(); openList(btn); }); };
+    numCombo($('#fcC', m), raw => { const v = raw === '' ? 'auto' : parseNum(raw); if (v === null || (v !== 'auto' && (v < 0 || v > 200))) { $('#fcC', m).classList.add('bad'); return; } S.env.cf = Object.assign({ top: 'auto', bot: 'auto', lft: 'auto', rgt: 'auto' }, S.env.cf || {}, { [k]: v }); changed(false); });
+    const fa = $('#fcAll', m); if (fa) fa.onclick = () => covPopup();
+    numCombo($('#fdV', m), raw => { const v = parseNum(raw); if (v === null || v < 150 || v > 3000) { $('#fdV', m).classList.add('bad'); return; } S.geom[dimK] = v; changed(true); });
+    $$('[data-fl]', m).forEach(b => b.onclick = () => { faceLd.type = b.dataset.fl; faceLd.v = faceLd.type === 'q' ? 1 : faceLd.type === 'H' ? 5 : 100; popRedraw(); });
+    const fk = $('#flK', m); if (fk) fk.onchange = e => { if (faceLd.type === 'N') faceLd.kind = e.target.value; else faceLd.kindH = e.target.value; };
+    const add = $('#flAdd', m); if (add) add.onclick = () => {
+      if (S.loads.mode === 'direct') { toast('Tryb sił obliczeniowych wprost – przełącz „Sposób zadania obciążeń” w Danych.', 4000); return; }
+      const v = parseNum($('#flV', m).value); if (v === null) { $('#flV', m).classList.add('bad'); return; }
+      faceLd.v = v; const zEl = $('#flZ', m), zr = zEl ? zEl.value.trim() : '', z = zr === '' ? '' : parseNum(zr); faceLd.z = z === null ? '' : z;
+      const kind = faceLd.type === 'N' ? faceLd.kind : faceLd.kindH, ax = dimK === 'h' ? 'h' : 'b';
+      const o = { pm: kind === 'wind', N: 0 };
+      if (faceLd.type === 'N') { const er = $('#flE', m).value.trim(), e = er === '' ? (dimK === 'b' ? S.geom.b : S.geom.h) / 2 : parseNum(er); faceLd.e = er; o.N = v; o['e' + ax] = sgn * Math.abs(e || 0); if (z !== '' && z !== null) o.zN = z; o.name = `Siła na boku ${E.FACE_N[k]}${z !== '' && z !== null ? ` (z = ${fmt(z, 2)} m)` : ''}`; }
+      else if (faceLd.type === 'q') { o['q' + ax] = -sgn * Math.abs(v); o.name = `Parcie na bok ${E.FACE_N[k]}`; }
+      else { o['H' + ax] = -sgn * Math.abs(v); if (z !== '' && z !== null) o.zH = z; o.name = `Siła pozioma na bok ${E.FACE_N[k]}`; }
+      S.loads.items.push(E.normItem(E.newItem(kind, o))); changed(false); loadPopup(S.loads.items.length - 1);
+    };
+  });
 }
 function cornerPopup() {
   if (!S.reb.set) { S.reb.set = true; changed(false); }
@@ -1067,6 +1310,7 @@ function failMarks() {
   R.checks.filter(c => c.status === 'fail').forEach(c => {
     const id = c.id;
     if (id === 'cnom') return add('.covz', c);
+    if (id === 'cnomF' && c.at && c.at.face) return add(`.covz[data-z="cv:${c.at.face}"]`, c);
     if (['tied', 'st', 'st2', 'phit', 'Vy', 'Vz'].includes(id)) { add('.inz', c); add('.tieh', c); return; }
     if (id === 'sp') { if (!g.round && !g.isPoly) E.FACES.filter(k => L.faces[k].clear < L.smin - 0.5).forEach(k => add(`.facez[data-z="f:${k}"]`, c)); else bars('').forEach(q => add(q, c)); return; }
     if (/^fire/.test(id)) { add('.covz', c); return; }
@@ -1299,6 +1543,8 @@ function renderElev(el) {
   $('#elZone', el).onclick = () => stirZonePopup('bot'); $('#elLap', el).onclick = () => lapPopup(); $('#elTie', el).onclick = () => tiePopup();
   $$('.elevsvg .stzone', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); stirZonePopup(g.dataset.tz); }));
   $$('.elevsvg .lapdim', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); lapPopup(); }));
+  $$('.elevsvg .fhit', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); if (g.dataset.el === 'slab') slabPopup(); else foundPopup(); }));
+  $$('.elevsvg .bend', el).forEach(g => g.addEventListener('click', ev => { ev.stopPropagation(); if (g.dataset.end === 'foot') foundPopup(); else if (S.det.top === 'cont') lapPopup(); else slabPopup(); }));
   $$('.xbars svg', el).forEach(sv => { sv.style.cursor = 'pointer'; sv.addEventListener('click', ev => { const t = ev.target.closest('[data-pos]'); const r = t ? R.sched.rows.find(q => String(q.pos) === t.dataset.pos) : null; if (!r) return; if (r.kind === 'tie' || r.kind === 'pin') tiePopup(); else if (r.kind === 'start') lapPopup(); else rebPopup(); }); });
   bindElevHover(el);
 }
@@ -1329,7 +1575,16 @@ function bindElevHover(el) {
   let pend = null, last = null;
   svg.addEventListener('mousemove', ev => { const q = zOf(ev); if (!inside(q)) { cur.style.display = 'none'; return; } cur.setAttribute('y1', q.py); cur.setAttribute('y2', q.py); cur.style.display = ''; svg.style.cursor = 'crosshair'; const zz = Math.round(q.z / 10) * 10; if (zz === last) return; last = zz; if (!pend) pend = requestAnimationFrame(() => { pend = null; show(last); }); });
   svg.addEventListener('mouseleave', () => { cur.style.display = 'none'; svg.style.cursor = ''; });
-  svg.addEventListener('click', ev => { if (ev.target.closest('.stzone, .lapdim')) return; const q = zOf(ev); if (inside(q)) zSecPopup(Math.round(q.z / 10) * 10); });
+  svg.addEventListener('click', ev => { if (ev.target.closest('.stzone, .lapdim, .fhit, .bend, .zdrag, .ldr')) return; const q = zOf(ev); if (inside(q)) zSecPopup(Math.round(q.z / 10) * 10); });
+  // przeciąganie granicy strefy zagęszczenia strzemion (dół / góra) – długość strefy zadana ręcznie, co 50 mm
+  $$('.zdrag', svg).forEach(hd => hd.addEventListener('pointerdown', ev => {
+    ev.preventDefault(); ev.stopPropagation(); const kz = hd.dataset.zd; hd.setPointerCapture(ev.pointerId);
+    const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text'); lbl.setAttribute('font-size', '10'); lbl.setAttribute('font-weight', '700'); lbl.style.fill = 'var(--acc)'; svg.appendChild(lbl);
+    let val = null;
+    const mv = e2 => { const q = zOf(e2), z = Math.max(0, Math.min(L, q.z)); val = Math.round((kz === 'bot' ? z : L - z) / 50) * 50; val = Math.max(0, Math.min(L, val)); hd.setAttribute('transform', `translate(0,${q.py - (+hd.querySelector('line').getAttribute('y1'))})`); lbl.setAttribute('x', x1 + 30); lbl.setAttribute('y', q.py + 4); lbl.textContent = `strefa ${kz === 'bot' ? 'u dołu' : 'u góry'}: ${val} mm`; };
+    const up = () => { hd.removeEventListener('pointermove', mv); hd.removeEventListener('pointerup', up); lbl.remove(); if (val !== null) { S.stir[kz === 'bot' ? 'zB' : 'zT'] = val; changed(true); toast(`Strefa zagęszczenia ${kz === 'bot' ? 'u dołu' : 'u góry'}: ${val} mm (zadana ręcznie – przywrócenie: Strefy strzemion… → auto).`, 3500); } };
+    hd.addEventListener('pointermove', mv); hd.addEventListener('pointerup', up);
+  }));
 }
 function zSecPopup(z) {
   const L = R.g.L, m = $('#modal'), q = zInfo(z);
@@ -1364,6 +1619,53 @@ function stirZonePopup(kz) {
   const sel = { bot: '#szB', top: '#szT', mid: '#szS' }[kz]; if (sel) setTimeout(() => hlg('#modal ' + sel), 50);
 }
 // długość zakładu prętów (auto – wymagana, albo zadana; mniejsza od wymaganej – warunek niespełniony)
+// fundament / słup niższy: wymiary fundamentu, otulina dolna, zagłębienie i stopka prętów startowych
+const optInp = (id, v, ph, list, unit) => `<div class="combo"><input id="${id}" value="${v === 'auto' || v === '' || v === undefined ? '' : esc(showNum(v))}" placeholder="${esc(ph)}" autocomplete="off" inputmode="decimal"><button tabindex="-1" data-list='${JSON.stringify(list)}' aria-label="lista">▾</button></div><span class="unit">${unit || 'mm'}</span>`;
+function bindOpt(m, id, set, opts) {
+  const inp = $('#' + id, m); if (!inp) return; opts = opts || {};
+  const ap = () => { const raw = inp.value.trim(); if (raw === '') { inp.classList.remove('bad'); set(opts.req ? null : 'auto'); return; } const v = parseNum(raw); const bad = v === null || (opts.min !== undefined && v < opts.min) || (opts.max !== undefined && v > opts.max); inp.classList.toggle('bad', bad); if (!bad) set(v); };
+  inp.addEventListener('change', ap); inp.addEventListener('keydown', e => { if (e.key === 'Enter') ap(); });
+  const b = inp.nextElementSibling; if (b) b.addEventListener('mousedown', e => { e.preventDefault(); openList(b); });
+}
+function foundPopup() {
+  const D0 = R && R.g ? R.g.dir.y.depth : 400;
+  miniPop('Dół słupa – fundament / słup niższy', () => {
+    const st = R && R.sched ? R.sched.rows.find(r => r.kind === 'start') : null, A = R && R.anch;
+    return `<div class="fields"><div class="row wide"><label>Dół słupa</label>${selHTML('fdB', [['found', 'fundament – pręty startowe'], ['col', 'słup kondygnacji niższej – zakład nad stropem']], S.det.base)}</div>
+      ${S.det.base === 'found' ? `<div class="row"><label>Wysokość fundamentu h<sub>F</sub></label>${optInp('fdH', S.det.hF, '', [400, 500, 600, 700, 800, 1000, 1200, 1500])}</div>
+      <div class="row"><label>Szerokość fundamentu (rysunek)</label>${optInp('fdW', S.det.bF, `auto ${D0 + 800}`, ['', 800, 1000, 1200, 1500, 2000, 2500, 3000])}</div>
+      <div class="row"><label>Otulina dolna fundamentu c<sub>F</sub></label>${optInp('fdC', S.det.cF, '', [40, 50, 60, 75])}</div>
+      <div class="row"><label>Zagłębienie prętów startowych w fundamencie</label>${optInp('fdI', S.det.inF, `auto ${S.det.hF - S.det.cF - 20}`, ['', 300, 400, 500, 600, 700, 800, 1000])}</div>
+      <div class="row"><label>Stopka (odgięcie) prętów startowych</label>${optInp('fdF', S.det.footF, `auto ${st ? st.leg : 200}`, ['', 150, 200, 250, 300, 400])}</div>` : ''}</div>
+      <div class="hint keep">${S.det.base === 'found' ? `Pręty startowe sięgają nad siatkę dolną fundamentu (h<sub>F</sub> − c<sub>F</sub> − 20 mm) i wychodzą ponad fundament na długość zakładu l₀ = ${A ? fmt(A.l0, 0) : '—'} mm. Wymagane zakotwienie l<sub>bd</sub> = ${A ? fmt(A.lbd, 0) : '—'} mm ${st && A ? (st.inF >= A.lbd ? '≤' : '>') : ''} ${st ? fmt(st.inF, 0) + ' mm (zagłębienie)' : ''}. Puste pole – wartość automatyczna.` : 'Pręty słupa niższego wychodzą ponad strop na długość zakładu (zakładka Zbrojenie słupa, wymiar l₀).'}</div>`;
+  }, m => {
+    $('#fdB', m).onchange = e => { S.det.base = e.target.value; changed(true); };
+    bindOpt(m, 'fdH', v => { if (v !== null && v !== 'auto') { S.det.hF = v; changed(true); } }, { min: 200, max: 4000, req: true });
+    bindOpt(m, 'fdW', v => { S.det.bF = v; changed(true); }, { min: 200, max: 10000 });
+    bindOpt(m, 'fdC', v => { if (v !== null && v !== 'auto') { S.det.cF = v; changed(true); } }, { min: 20, max: 150, req: true });
+    bindOpt(m, 'fdI', v => { S.det.inF = v; changed(true); }, { min: 100, max: 4000 });
+    bindOpt(m, 'fdF', v => { S.det.footF = v; changed(true); }, { min: 0, max: 2000 });
+  });
+  const pv = $('#modal .rbprev'); if (pv) pv.remove();
+}
+// góra słupa – strop / belka: grubość, szerokość (rysunek), zakończenie prętów (zakład / odgięcie)
+function slabPopup() {
+  const D0 = R && R.g ? R.g.dir.y.depth : 400;
+  miniPop('Góra słupa – strop / belka', () => {
+    const mn = R && R.sched ? R.sched.rows.find(r => r.kind === 'main') : null;
+    return `<div class="fields"><div class="row wide"><label>Góra słupa</label>${selHTML('sbT', [['cont', 'pręty przedłużone na zakład do słupa wyżej'], ['anch', 'ostatnia kondygnacja – pręty zakotwione w stropie / belce']], S.det.top)}</div>
+      <div class="row"><label>Grubość stropu / wysokość belki</label>${optInp('sbH', S.det.hTop, '', [200, 250, 300, 400, 500, 600, 700])}</div>
+      <div class="row"><label>Szerokość stropu / belki (rysunek)</label>${optInp('sbW', S.det.bTop, `auto ${D0 + 1200}`, ['', 600, 1000, 1500, 2000, 3000])}</div>
+      ${S.det.top === 'anch' ? `<div class="row"><label>Odgięcie prętów w stropie (długość ramienia)</label>${optInp('sbL', S.det.legTop, `auto ${mn ? mn.leg : 200}`, ['', 150, 200, 250, 300, 400, 500])}</div>` : ''}</div>
+      <div class="hint keep">${S.det.top === 'anch' ? `Pręty kończą się pod zbrojeniem stropu (otulina + strzemię) i są odgięte do wnętrza; ramię automatycznie max(12⌀; 150 mm; l<sub>bd</sub> − (h − c)).` : `Pręty wychodzą ponad strop na długość zakładu l₀ = ${R && R.anch ? fmt(R.anch.l0, 0) : '—'} mm (zmiana: wymiar zakładu na rysunku).`} Puste pole – wartość automatyczna.</div>`;
+  }, m => {
+    $('#sbT', m).onchange = e => { S.det.top = e.target.value; changed(true); };
+    bindOpt(m, 'sbH', v => { if (v !== null && v !== 'auto') { S.det.hTop = v; changed(true); } }, { min: 100, max: 3000, req: true });
+    bindOpt(m, 'sbW', v => { S.det.bTop = v; changed(true); }, { min: 200, max: 20000 });
+    bindOpt(m, 'sbL', v => { S.det.legTop = v; changed(true); }, { min: 0, max: 3000 });
+  });
+  const pv = $('#modal .rbprev'); if (pv) pv.remove();
+}
 function lapPopup() {
   const A = R.anch;
   miniPop('Zakład prętów podłużnych', () => `<div class="fields"><div class="row"><label>Długość zakładu l₀</label><div class="combo"><input id="lpL" value="${S.det.l0Man === 'auto' ? '' : esc(showNum(S.det.l0Man))}" placeholder="auto ${fmt(A.l0req, 0)}" autocomplete="off"><button tabindex="-1" data-list='["", 500, 600, 700, 800, 900, 1000, 1200, 1500]' aria-label="lista">▾</button></div><span class="unit">mm</span></div>
@@ -1391,8 +1693,9 @@ function draw3D(cv) {
   const cyl = (cx, cy, r, z0, z1, kind, nS) => { nS = nS || 24; for (let i = 0; i < nS; i++) { const a = i / nS * 2 * Math.PI, b = (i + 1) / nS * 2 * Math.PI; polys.push({ f: [[cx + r * Math.cos(a), z0, cy + r * Math.sin(a)], [cx + r * Math.cos(b), z0, cy + r * Math.sin(b)], [cx + r * Math.cos(b), z1, cy + r * Math.sin(b)], [cx + r * Math.cos(a), z1, cy + r * Math.sin(a)]], kind }); } };
   const colBody = (z0, z1, kind) => { if (g.round) { cyl(g.D / 2, g.D / 2, g.D / 2, z0, z1, kind); if (g.ring) cyl(g.D / 2, g.D / 2, g.Di / 2, z0, z1, kind); } else if (g.isPoly) g.rects.forEach(r => box(r.x0, r.x1, z0, z1, r.y0, r.y1, kind)); else box(0, g.b, z0, z1, 0, g.h, kind); };
   colBody(0, L, 'col');
-  if (found) box(-200, bw + 200, -det.hF, 0, -200, bh + 200, 'sup'); else colBody(zBot, 0, 'sup');
-  box(-260, bw + 260, L, L + hTop, -260, bh + 260, 'slab');
+  const eF = ((det.bF !== 'auto' && det.bF ? det.bF : Math.max(bw, bh) + 800) - Math.max(bw, bh)) / 2, eT = Math.min(900, ((det.bTop !== 'auto' && det.bTop ? det.bTop : Math.max(bw, bh) + 1200) - Math.max(bw, bh)) / 2);
+  if (found) box(-eF, bw + eF, -det.hF, 0, -eF, bh + eF, 'sup'); else colBody(zBot, 0, 'sup');
+  box(-eT, bw + eT, L, L + hTop, -eT, bh + eT, 'slab');
   if (cont) colBody(L + hTop, zTop, 'sup');
   const cx0 = g.round ? g.D / 2 : g.isPoly ? g.xc : g.b / 2, cy0 = g.round ? g.D / 2 : g.isPoly ? g.yc : g.h / 2;
   const main = R.sched.rows.find(r => r.kind === 'main') || { leg: 0 }, start = R.sched.rows.find(r => r.kind === 'start');
@@ -1854,20 +2157,95 @@ function updateTitle() {
   document.title = t;
   if (typeof window.hostTitle === 'function') { try { window.hostTitle(t); } catch (e) { /* */ } }
 }
-// kilka słupów w projekcie
-let COLS = null, curC = 0;
+// kilka słupów w projekcie – albo jeden słup wielokondygnacyjny (STACK: COLS[0] – kondygnacja najniższa)
+let COLS = null, curC = 0, STACK = false;
 const colsSync = () => { if (!COLS) COLS = [S]; COLS[curC] = S; };
-const colsOut = () => { colsSync(); return COLS.length > 1 ? { cols: COLS.map(b => b), cur: curC } : {}; };
-function colsIn(o, st) { if (o && Array.isArray(o.cols) && o.cols.length > 1) { COLS = o.cols.slice(0, 20).map(b => E.normalize(b)); curC = Math.max(0, Math.min(COLS.length - 1, +o.cur || 0)); return COLS[curC]; } COLS = null; curC = 0; return st; }
+const colsOut = () => { colsSync(); return COLS.length > 1 || STACK ? { cols: COLS.map(b => b), cur: curC, stack: STACK } : {}; };
+function colsIn(o, st) { STACK = !!(o && o.stack); if (o && Array.isArray(o.cols) && (o.cols.length > 1 || STACK)) { COLS = o.cols.slice(0, 20).map(b => E.normalize(b)); curC = Math.max(0, Math.min(COLS.length - 1, +o.cur || 0)); return COLS[curC]; } COLS = null; curC = 0; return st; }
+// obciążenia przekazywane z kondygnacji wyżej: siły N każdego obciążenia (osobne przypadki do kombinacji – łączone wg nazwy i rodzaju) i ciężar słupów
+function aboveFor(i) {
+  if (!STACK || !COLS) return [];
+  const out = [];
+  for (let j = i + 1; j < COLS.length; j++) {
+    const Sj = COLS[j];
+    if (Sj.loads.mode === 'direct') { const r = Sj.loads.direct.filter(q => !q.off); if (r.length) out.push({ kind: 'perm', name: `Siły z kondygnacji ${j + 1} (obliczeniowe/1,35)`, N: Math.max(...r.map(q => q.N || 0)) / 1.35, from: 'K' + (j + 1) }); }
+    else Sj.loads.items.forEach(it => { if (it.off || !it.N) return; out.push({ kind: it.kind, cat: it.cat, alt: it.alt, name: it.name, N: it.N, pm: it.pm, p0: it.p0, p1: it.p1, p2: it.p2, from: 'K' + (j + 1) }); });
+    if (Sj.loads.sw) { try { const gj = E.geomCalc(E.normalize(JSON.parse(JSON.stringify(Sj))), { errors: [] }); if (gj && gj.selfW) out.push({ kind: 'perm', name: 'Ciężar słupów kondygnacji wyżej', N: gj.selfW * gj.L / 1e3, from: 'K' + (j + 1) }); } catch (e) { /* */ } }
+  }
+  // sumowanie obciążeń o tej samej nazwie i rodzaju (jeden przypadek obciążenia)
+  const m = []; out.forEach(q => { const t = m.find(p => p.kind === q.kind && (q.kind !== 'imp' || p.cat === q.cat) && String(p.name).toLowerCase() === String(q.name).toLowerCase()); if (t) { t.N += q.N; t.from += ', ' + q.from; } else m.push(Object.assign({}, q)); });
+  return m;
+}
+function stackPrep() {
+  if (!STACK || !COLS) { if (S.above && S.above.length) S.above = []; return; }
+  colsSync();
+  COLS.forEach((c, i) => { if (i < COLS.length - 1) c.det.top = 'cont'; if (i > 0) c.det.base = 'col'; });
+  S.above = aboveFor(curC);
+}
+function toggleStack(on) {
+  colsSync(); STACK = !!on;
+  if (STACK) COLS.forEach((c, i) => { if (/^Słup S-\d+$/.test(c.meta.name || '')) c.meta.name = `Kondygnacja ${i + 1}`; });
+  else COLS.forEach(c => { c.above = []; });
+  dirty = true; rendered = {}; renderInputs(); recalc(); updateTitle(); autosave();
+  toast(STACK ? 'Słup wielokondygnacyjny: zakładki to kondygnacje (1 – najniższa). Każda kondygnacja dostaje w głowicy obciążenia i ciężar słupów kondygnacji wyżej; „+” dodaje kondygnację na górze.' : 'Wyłączono słup wielokondygnacyjny – zakładki to niezależne słupy.', 6000);
+}
+function addStorey() {
+  colsSync(); if (COLS.length >= 20) { toast('Maksymalnie 20 kondygnacji.'); return; }
+  const top = COLS[COLS.length - 1], n = E.normalize(JSON.parse(JSON.stringify(top)));
+  n.meta.name = `Kondygnacja ${COLS.length + 1}`; n.meta.ticks = {}; n.meta.ticksInit = false; delete n.meta.own; n.above = [];
+  top.det.top = 'cont'; n.det.base = 'col';
+  COLS.push(n); dirty = true; switchCol(COLS.length - 1);
+}
+// wyniki wszystkich kondygnacji (w tle, kolejno) – zestawienie i widok całego słupa
+let stackRes = { key: '', res: [] };
+function stackKey() { colsSync(); return JSON.stringify(COLS.map(c => [c.geom, c.reb, c.loads, c.buck, c.mat, c.det, c.stir, c.env, c.sec2, c.fire])); }
+function stackRun() {
+  if (!STACK || !COLS) return; const key = stackKey(); if (stackRes.key === key) return;
+  stackRes = { key, res: [] }; let j = 0;
+  const step = () => { if (stackRes.key !== key || j >= COLS.length) { paintStack(); return; }
+    const Sj = JSON.parse(JSON.stringify(COLS[j])); Sj.above = aboveFor(j); let Rj = null; try { Rj = E.calc(Sj, { fast: true }); } catch (e) { Rj = null; }
+    stackRes.res[j] = Rj && !(Rj.errors && Rj.errors.length) ? { ok: Rj.ok, u: Rj.maxUtil, fails: Rj.checks.filter(c => c.status === 'fail').length, N: Rj.NEdMax, Nabove: (Sj.above || []).reduce((a, q) => a + q.N, 0), reb: Rj.lay.n ? `${Rj.lay.n}⌀${Rj.lay.dmax}` : '—', sec: shapeOf(COLS[j]), L: COLS[j].geom.L, dep: Rj.g.dir.y.depth } : { err: true, sec: shapeOf(COLS[j]), L: COLS[j].geom.L, dep: 300 };
+    j++; paintStack(); setTimeout(step, 0); };
+  setTimeout(step, 30);
+}
+const shapeOf = st => { const G = st.geom; return G.shape === 'circ' ? `⌀${G.D}` : G.shape === 'ring' ? `⌀${G.pipe.D}×${G.pipe.t}` : G.shape === 'T' ? `T ${G.tee.bf}×${G.tee.h}` : G.shape === 'L' ? `L ${G.ang.b}×${G.ang.h}` : `${G.b}×${G.h}`; };
+function stackSVG() {
+  const n = COLS.length, W = 300, H = Math.max(260, Math.min(520, 120 * n)), mt = 14, mb = 18, Ls = COLS.map(c => c.geom.L), hS = COLS.map(c => c.det.hTop / 1000), tot = Ls.reduce((a, v, i) => a + v + hS[i], 0);
+  const k = (H - mt - mb) / tot, deps = COLS.map((c, j) => (stackRes.res[j] && stackRes.res[j].dep) || (c.geom.shape === 'rect' ? c.geom.h : c.geom.D || 400)), kx = 70 / Math.max(...deps), cx = 70;
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="stacksvg">`, z = 0;
+  COLS.forEach((c, j) => {
+    const r = stackRes.res[j], y0 = H - mb - z * k, y1 = H - mb - (z + Ls[j]) * k, w = Math.max(10, deps[j] * kx), col = !r ? '#9aa3b0' : r.err || r.fails ? '#c0262d' : '#1d7f3c';
+    s += `<g data-stk="${j}" style="cursor:pointer"><title>Kondygnacja ${j + 1}: ${esc(shapeOf(c))} mm, L = ${fmt(Ls[j], 2)} m – kliknij, aby przejść</title><rect x="${cx - w / 2}" y="${y1}" width="${w}" height="${y0 - y1}" fill="${j === curC ? '#dbe7fb' : '#eceef1'}" stroke="${j === curC ? '#1d5bb8' : '#39414f'}" stroke-width="${j === curC ? 2 : 1}"/>`;
+    s += `<rect x="${cx + 60}" y="${(y0 + y1) / 2 - 16}" width="${W - cx - 64}" height="32" fill="transparent"/><text x="${cx + 62}" y="${(y0 + y1) / 2 - 3}" font-size="11" font-weight="700" fill="#1b2230">K${j + 1} · ${esc(shapeOf(c))} · ${r && !r.err ? esc(r.reb) : '…'}</text>`;
+    s += `<text x="${cx + 62}" y="${(y0 + y1) / 2 + 11}" font-size="10" fill="${col}">${!r ? 'obliczanie…' : r.err ? 'błąd danych' : `η = ${fmt(r.u * 100, 0)}%${r.fails ? ` · ✖ ${r.fails}` : ' · ✔'} · N = ${fmt(r.N / 1e3, 0)} kN`}</text></g>`;
+    z += Ls[j];
+    const ys = H - mb - (z + hS[j]) * k; s += `<rect x="${cx - 55}" y="${ys}" width="110" height="${Math.max(2, hS[j] * k)}" fill="#d9dde3" stroke="#5d6778" stroke-width="0.6"/>`;
+    z += hS[j];
+  });
+  s += `<line x1="${cx - 60}" y1="${H - mb}" x2="${cx + 60}" y2="${H - mb}" stroke="#39414f" stroke-width="1.6"/>`;
+  return s + '</svg>';
+}
+function stackBoxHTML() {
+  if (!STACK || !COLS) return '';
+  stackRun();
+  return `<div class="box" id="stackBox"><div class="schhead"><h4>Słup wielokondygnacyjny – ${COLS.length} ${COLS.length === 1 ? 'kondygnacja' : COLS.length < 5 ? 'kondygnacje' : 'kondygnacji'}</h4><span class="hint keep" style="margin:0">kliknij kondygnację; „+” w zakładkach – kondygnacja wyżej</span></div><div id="stackIn">${stackInner()}</div></div>`;
+}
+function stackInner() {
+  const rows = COLS.map((c, j) => { const r = stackRes.res[j]; return `<tr data-stk="${j}" class="${j === curC ? 'selr' : ''}" style="cursor:pointer"><td><b>K${j + 1}</b> ${esc(c.meta.name || '')}</td><td class="n">${fmt(c.geom.L, 2)}</td><td>${esc(shapeOf(c))}</td><td>${r && !r.err ? esc(r.reb) : '…'}</td><td class="n">${r && !r.err ? fmt(r.Nabove, 0) : ''}</td><td class="n">${r && !r.err ? fmt(r.N / 1e3, 0) : ''}</td><td class="n" style="color:var(--${r && !r.err && !r.fails ? 'ok' : 'fail'})">${r ? (r.err ? 'błąd' : `${fmt(r.u * 100, 0)}%${r.fails ? ' ✖' : ' ✔'}`) : '…'}</td></tr>`; }).reverse().join('');
+  return `<div class="flex" style="gap:10px;align-items:flex-start"><div>${stackSVG()}</div><div class="tscroll" style="flex:1;min-width:260px"><table class="ldsum"><thead><tr><th>Kondygnacja</th><th>L [m]</th><th>Przekrój</th><th>Zbrojenie</th><th>N z góry [kN]</th><th>N<sub>Ed,max</sub> [kN]</th><th>η</th></tr></thead><tbody>${rows}</tbody></table><p class="hint keep">N z góry – suma wartości charakterystycznych obciążeń kondygnacji wyżej (z ciężarem słupów), przekazywana w głowicy jako osobne przypadki obciążeń (łączone wg nazwy i rodzaju); momenty i siły poziome każdej kondygnacji – z jej analizy ramy. Dół kondygnacji wyżej – zakład nad stropem, góra kondygnacji niższej – pręty przedłużone na zakład.</p></div></div>`;
+}
+function paintStack() { const el = $('#stackIn'); if (el) { el.innerHTML = stackInner(); themeSvgIn(el); } }
+document.addEventListener('click', e => { const g = e.target.closest && e.target.closest('[data-stk]'); if (g && g.closest('#stackBox')) { const j = +g.dataset.stk; if (j !== curC) switchCol(j); } });
 function switchCol(i) { colsSync(); if (i === curC || !COLS[i]) return; curC = i; S = COLS[i]; selCombo = null; $('#projName').value = S.meta.name || ''; rendered = {}; renderInputs(); recalc(); updateTitle(); autosave(); }
 function addCol() { colsSync(); if (COLS.length >= 20) { toast('Maksymalnie 20 słupów w projekcie.'); return; } const n = E.defaultState(); ['mat', 'env', 'coef', 'sls', 'fire', 'sec2', 'det'].forEach(k => { n[k] = JSON.parse(JSON.stringify(S[k])); }); n.meta.name = `Słup S-${COLS.length + 1}`; COLS.push(E.normalize(n)); dirty = true; switchCol(COLS.length - 1); }
 function delCol(i) { colsSync(); if (COLS.length < 2) return; COLS.splice(i, 1); if (i < curC) curC--; curC = Math.min(curC, COLS.length - 1); S = COLS[curC]; dirty = true; $('#projName').value = S.meta.name || ''; rendered = {}; renderInputs(); recalc(); updateTitle(); autosave(); }
-function colTabsHTML() { colsSync(); return `<div class="beamtabs">${COLS.map((b, i) => `<button class="btab ${i === curC ? 'on' : ''}" data-ctab="${i}" title="${esc(b.meta.name || 'Słup ' + (i + 1))}">${i + 1}<span>${esc((b.meta.name || '').slice(0, 14))}</span>${i === curC && COLS.length > 1 ? `<i data-cdel="${i}" title="Usuń ten słup">×</i>` : ''}</button>`).join('')}${COLS.length < 20 ? '<button class="btab add" data-cadd="1" title="Dodaj kolejny słup – osobne dane i obliczenia">+</button>' : ''}</div>`; }
+function colTabsHTML() { colsSync(); return `<div class="beamtabs">${COLS.map((b, i) => `<button class="btab ${i === curC ? 'on' : ''}" data-ctab="${i}" title="${esc(b.meta.name || (STACK ? 'Kondygnacja ' : 'Słup ') + (i + 1))}">${STACK ? 'K' : ''}${i + 1}<span>${esc((b.meta.name || '').slice(0, 14))}</span>${i === curC && COLS.length > 1 ? `<i data-cdel="${i}" title="Usuń ${STACK ? 'tę kondygnację' : 'ten słup'}">×</i>` : ''}</button>`).join('')}${COLS.length < 20 ? `<button class="btab add" data-cadd="1" title="${STACK ? 'Dodaj kondygnację na górze (kopia najwyższej – przekrój, zbrojenie, obciążenia stropu)' : 'Dodaj kolejny słup – osobne dane i obliczenia'}">+</button>` : ''}<label class="chk sm stkchk" title="Zakładki jako kondygnacje jednego słupa: obciążenia i ciężar kondygnacji wyżej przekazywane w dół; różne przekroje, zbrojenie i wysokości kondygnacji"><input type="checkbox" data-stack="1" ${STACK ? 'checked' : ''}><span>słup wielokondygnacyjny</span></label></div>`; }
 document.addEventListener('click', async e => {
-  const d = e.target.closest && e.target.closest('[data-cdel]'); if (d) { e.stopPropagation(); const i = +d.dataset.cdel; if (await ask(`Usunąć słup „${esc(COLS[i].meta.name || i + 1)}” z projektu?`, 'Usuń', true)) delCol(i); return; }
+  const d = e.target.closest && e.target.closest('[data-cdel]'); if (d) { e.stopPropagation(); const i = +d.dataset.cdel; if (await ask(`Usunąć ${STACK ? 'kondygnację' : 'słup'} „${esc(COLS[i].meta.name || i + 1)}” z projektu?`, 'Usuń', true)) delCol(i); return; }
   const t = e.target.closest && e.target.closest('[data-ctab]'); if (t) { switchCol(+t.dataset.ctab); return; }
-  if (e.target.closest && e.target.closest('[data-cadd]')) addCol();
+  if (e.target.closest && e.target.closest('[data-cadd]')) { if (STACK) addStorey(); else addCol(); }
 });
+document.addEventListener('change', e => { const c = e.target.closest && e.target.closest('[data-stack]'); if (c) toggleStack(c.checked); });
 let asT = null;
 function autosave() {
   clearTimeout(asT);
@@ -1903,7 +2281,7 @@ async function openFile() {
 }
 async function newProject() {
   if (dirty && !(await ask('Niezapisane zmiany zostaną utracone. Utworzyć nowy projekt?', 'Nowy projekt'))) return;
-  cloudId = null; cloudName = ''; S = E.defaultState(); COLS = null; curC = 0; filePath = ''; dirty = false; selCombo = null;
+  cloudId = null; cloudName = ''; S = E.defaultState(); COLS = null; curC = 0; STACK = false; filePath = ''; dirty = false; selCombo = null;
   $('#projName').value = S.meta.name; renderInputs(); recalc(); updateTitle(); autosave();
 }
 function reportDoc(body, title) {
@@ -2009,7 +2387,7 @@ async function cloudDelete(id) {
 
 function about() {
   const m = $('#modal');
-  m.innerHTML = `<div class="dlg"><h3>SłupŻB 1.2 – słupy żelbetowe wg Eurokodu 2</h3>
+  m.innerHTML = `<div class="dlg"><h3>SłupŻB 1.3 – słupy żelbetowe wg Eurokodu 2</h3>
   <p>Wymiarowanie i sprawdzanie słupów żelbetowych wg PN-EN 1992-1-1 (parametry krajowe wg Załącznika Krajowego PL: γ<sub>c</sub> = 1,4, γ<sub>s</sub> = 1,15, α<sub>cc</sub> = 1,0, ⌀<sub>min</sub> = 12 mm), kombinacje wg PN-EN 1990, odporność ogniowa wg PN-EN 1992-1-2 (metoda A).</p>
   <ul>
   <li><b>Przekroje</b> – prostokątne b × h, okrągłe ⌀D, pierścieniowe ⌀D × t (jedna lub dwie warstwy prętów), teowe (T) i kątowe (L); pręty narożne i pośrednie o różnych średnicach, strzemiona dla każdego prostokąta składowego, szpilki z warunku 9.5.3(6); dla T i L nośność w płaszczyźnie z osią obojętną obróconą (drugi moment = 0) i osie główne bezwładności.</li>

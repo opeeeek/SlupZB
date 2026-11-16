@@ -115,14 +115,14 @@ D.sectionSVG = function (R, o) {
   } else {
     s += `<rect x="${ox}" y="${oy}" width="${bw}" height="${bh}" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.4"/>`;
     if (lay.n) {
-      const off = (c + dt / 2) * k, rr = ((lay.rin || 2 * dt) + dt / 2) * k;
-      const x0 = ox + off, y0 = oy + off, x1 = ox + bw - off, y1 = oy + bh - off;
+      const cf = lay.cf || { top: c, bot: c, lft: c, rgt: c }, rr = ((lay.rin || 2 * dt) + dt / 2) * k;
+      const x0 = ox + (cf.lft + dt / 2) * k, y0 = oy + (cf.top + dt / 2) * k, x1 = ox + bw - (cf.rgt + dt / 2) * k, y1 = oy + bh - (cf.bot + dt / 2) * k;
       const tieCol = fail.ties ? C.red : C.tie, tw = Math.max(1.3, dt * k);
       s += `<path d="M${x0 + rr},${y0} H${x1 - rr} A${rr},${rr} 0 0 1 ${x1},${y0 + rr} V${y1 - rr} A${rr},${rr} 0 0 1 ${x1 - rr},${y1} H${x0 + rr} A${rr},${rr} 0 0 1 ${x0},${y1 - rr} V${y0 + rr} A${rr},${rr} 0 0 1 ${x0 + rr},${y0} Z" fill="none" stroke="${tieCol}" stroke-width="${tw}" ${o.edit ? 'data-z="ties" class="zhit tieh"' : ''}/>`;
       // haki 135° w lewym górnym narożu
       const cb = lay.bars.find(b => b.corner) || lay.bars[0];
       if (cb && !o.small) {
-        const P = [X(lay.offC), Y(lay.offC)], u = [Math.SQRT1_2, Math.SQRT1_2], nn = [Math.SQRT1_2, -Math.SQRT1_2], rad = (cb.d / 2 + dt / 2) * k, L = Math.max(8, Math.max(10 * dt, 75) * k);
+        const P = [X(cb.x), Y(cb.y)], u = [Math.SQRT1_2, Math.SQRT1_2], nn = [Math.SQRT1_2, -Math.SQRT1_2], rad = (cb.d / 2 + dt / 2) * k, L = Math.max(8, Math.max(10 * dt, 75) * k);
         [1, -1].forEach(sg => { const st = [P[0] + nn[0] * rad * sg, P[1] + nn[1] * rad * sg]; s += `<line x1="${st[0]}" y1="${st[1]}" x2="${st[0] + u[0] * L}" y2="${st[1] + u[1] * L}" stroke="${tieCol}" stroke-width="${tw}" stroke-linecap="round"/>`; });
       }
       // szpilki
@@ -135,11 +135,14 @@ D.sectionSVG = function (R, o) {
       if (o.edit && o.small) s += `<rect x="${ox + 2}" y="${oy + 2}" width="${bw - 4}" height="${bh - 4}" fill="transparent" data-z="bars" class="zhit barsh"/>`;
       if (o.edit && !o.small) {
         // strefy kliknięcia: otulina (pas przy krawędziach), wnętrze (strzemiona), każdy bok (pręty pośrednie tego boku), naroża, pojedyncze pręty
-        const ci = (c + dt) * k, F = lay.faces, band = Math.max(...['top', 'bot', 'lft', 'rgt'].map(q => F[q].d), S.reb.dc) + 22;
-        s += `<path d="M${ox},${oy} h${bw} v${bh} h${-bw} Z M${ox + ci},${oy + ci} v${bh - 2 * ci} h${bw - 2 * ci} v${-(bh - 2 * ci)} Z" fill="transparent" fill-rule="evenodd" data-z="cov" class="zhit covz"><title>Otulina c_nom = ${c} mm – kliknij, aby zmienić</title></path>`;
-        const ins = (c + dt + band) * k; if (bw - 2 * ins > 6 && bh - 2 * ins > 6) s += `<rect x="${ox + ins}" y="${oy + ins}" width="${bw - 2 * ins}" height="${bh - 2 * ins}" fill="transparent" data-z="ties" class="zhit inz"><title>Wnętrze – strzemiona i szpilki: kliknij, aby zmienić</title></rect>`;
+        const F = lay.faces, band = Math.max(...['top', 'bot', 'lft', 'rgt'].map(q => F[q].d), S.reb.dc) + 22, cf = lay.cf || { top: c, bot: c, lft: c, rgt: c };
         const FN = { top: 'górny', bot: 'dolny', lft: 'lewy', rgt: 'prawy' };
-        ['top', 'bot', 'lft', 'rgt'].forEach(q => { const f = F[q], a = lay.offC + S.reb.dc / 2 + 4, L = ((f.hz ? g.b : g.h) - 2 * a) * k, th = Math.max(14, band * k), t = `<title>Bok ${FN[q]}: ${f.nm ? `${f.nm}⌀${f.d}` : 'bez prętów pośrednich'} – kliknij, aby zmienić zbrojenie tylko tego boku</title>`;
+        // otulina każdego boku – osobna strefa (pas przy krawędzi)
+        [['top', ox, oy, bw, (cf.top + dt) * k], ['bot', ox, oy + bh - (cf.bot + dt) * k, bw, (cf.bot + dt) * k], ['lft', ox, oy, (cf.lft + dt) * k, bh], ['rgt', ox + bw - (cf.rgt + dt) * k, oy, (cf.rgt + dt) * k, bh]].forEach(([q, x, y, w, h]) => {
+          s += `<rect x="${x}" y="${y}" width="${Math.max(3, w)}" height="${Math.max(3, h)}" fill="transparent" data-z="cv:${q}" class="zhit covz"><title>Bok ${FN[q]}: otulina c = ${cf[q]} mm${S.env.cf && S.env.cf[q] !== 'auto' ? ' (zadana dla boku)' : ''} – kliknij: zbrojenie, otulina, wymiar i obciążenie tego boku</title></rect>`; });
+        const iL = (cf.lft + dt + band) * k, iT = (cf.top + dt + band) * k, iR = (cf.rgt + dt + band) * k, iB = (cf.bot + dt + band) * k;
+        if (bw - iL - iR > 6 && bh - iT - iB > 6) s += `<rect x="${ox + iL}" y="${oy + iT}" width="${bw - iL - iR}" height="${bh - iT - iB}" fill="transparent" data-z="ties" class="zhit inz"><title>Wnętrze – strzemiona i szpilki: kliknij, aby zmienić</title></rect>`;
+        ['top', 'bot', 'lft', 'rgt'].forEach(q => { const f = F[q], a = f.pos[0] + S.reb.dc / 2 + 4, L = (f.pos[f.pos.length - 1] - f.pos[0] - S.reb.dc - 8) * k, th = Math.max(14, band * k), t = `<title>Bok ${FN[q]}: ${f.nm ? `${f.nm}⌀${f.d}` : 'bez prętów pośrednich'} – kliknij: zbrojenie, otulina, wymiar i obciążenie tego boku</title>`;
           if (L < 6) return;
           s += f.hz ? `<rect x="${X(a)}" y="${Y(f.c0) - th / 2}" width="${L}" height="${th}" fill="transparent" data-z="f:${q}" class="zhit facez">${t}</rect>` : `<rect x="${X(f.c0) - th / 2}" y="${Y(a)}" width="${th}" height="${L}" fill="transparent" data-z="f:${q}" class="zhit facez">${t}</rect>`; });
         lay.bars.filter(q => q.corner).forEach(q => { s += `<circle cx="${X(q.x)}" cy="${Y(q.y)}" r="${Math.max(9, (q.d / 2 + 12) * k)}" fill="transparent" data-z="corner" class="zhit cornz"><title>Pręty narożne 4⌀${q.d} – kliknij, aby zmienić</title></circle>`; });
@@ -151,6 +154,7 @@ D.sectionSVG = function (R, o) {
       if (lay.n) {
         // odstępy osiowe prętów (łańcuch pod przekrojem i z prawej)
         const F = lay.faces, sm = lay.smin, lbl = f => `${f.n - 1}×${fmt(f.ctc, 0)}`, bad = f => f.clear < sm - 0.5;
+        if (lay.cf && S.env.cf) { const cf = lay.cf; ['top', 'bot', 'lft', 'rgt'].forEach(q => { if (S.env.cf[q] === 'auto') return; const p = q === 'top' ? [ox + bw - 4, oy + cf.top * k / 2 + 3, 'end'] : q === 'bot' ? [ox + bw - 4, oy + bh - cf.bot * k / 2 + 3, 'end'] : q === 'lft' ? [ox + 3, oy + bh - 6, 'start'] : [ox + bw - 3, oy + bh - 6, 'end']; s += tx(p[0], p[1], `c = ${cf[q]}`, { fs: 8.5, c: cf[q] < c ? C.red : C.acc, a: p[2], w: 600 }); }); }
         const same = (A, B) => A.nm === B.nm && A.d === B.d;
         if (F.bot.nm && bw > 120) s += dimH(X(F.bot.pos[0]), X(F.bot.pos[F.bot.n - 1]), oy + bh + 14, lbl(F.bot), { below: true, fs: 9.5, c: bad(F.bot) ? C.red : undefined });
         if (F.rgt.nm && bh > 120) s += dimV(ox + bw + 14, Y(F.rgt.pos[0]), Y(F.rgt.pos[F.rgt.n - 1]), lbl(F.rgt), { right: true, fs: 9.5, c: bad(F.rgt) ? C.red : undefined });
@@ -234,7 +238,7 @@ D.schemeSVG = function (R, S, dir, o) {
   s += tx(8, 16, dir === 'y' ? 'Płaszczyzna h – zginanie M_y' : 'Płaszczyzna b – zginanie M_z', { fs: 11.5, w: 650, a: 'start' });
   s += tx(8, 30, `${B.schName.replace(/ \(.*\)/, '')}${B.braced ? '' : ''}`, { fs: 9.5, a: 'start', c: C.ink2 });
   // słup
-  s += `<rect x="${cx - cw / 2}" y="${Y(1)}" width="${cw}" height="${hh}" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.2" data-sch="${dir}" class="schcol"/>`;
+  s += `<rect x="${cx - cw / 2}" y="${Y(1)}" width="${cw}" height="${hh}" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.2" data-col="${dir}" class="schcol" style="cursor:copy"><title>Kliknij słup – dodaj obciążenie w tym miejscu (siła pionowa mimośrodowa, siła pozioma, obciążenie na wysokości)</title></rect>`;
   // podpory
   const hatch = (x, y, w, up) => { let p = `<line x1="${x - w / 2}" y1="${y}" x2="${x + w / 2}" y2="${y}" stroke="${C.ink}" stroke-width="1.6"/>`; for (let i = 0; i <= 6; i++) { const xx = x - w / 2 + i * w / 6; p += `<line x1="${xx}" y1="${y}" x2="${xx - 6}" y2="${y + (up ? -7 : 7)}" stroke="${C.gnd}" stroke-width="0.9"/>`; } return p; };
   const fixedBot = ['cant', 'fp', 'ff', 'ffs'].includes(sch), pinBot = sch === 'pp';
@@ -257,7 +261,15 @@ D.schemeSVG = function (R, S, dir, o) {
     s += `<g class="ldhit" data-ld="N" style="cursor:pointer"><title>Siła podłużna – kliknij, aby zmienić obciążenia</title><rect x="${cx - 70}" y="${tipY - 38}" width="80" height="40" fill="transparent"/><g stroke="${C.vio}" fill="${C.vio}"><line x1="${cx}" y1="${tipY - 34}" x2="${cx}" y2="${tipY}" stroke-width="1.8"/><path d="M${cx - 4},${tipY - 8} l4,8 l4,-8z"/></g>` + tx(cx - 6, tipY - 24, `N_Ed = ${fmt(NT / 1e3, 0)} kN`, { fs: 10, c: C.vio, a: 'end', w: 600 }) + '</g>';
     // poziome: siły skupione w głowicy i obciążenie rozłożone (suma wkładów pozycji)
     let H0 = 0, q0 = 0;
-    (R.items || []).forEach((it, i) => { const f = oc.c.f[i]; if (!f || it.kind === 'sw') return; H0 += f * (dir === 'y' ? it.Hh || 0 : it.Hb || 0); q0 += f * (dir === 'y' ? it.qh || 0 : it.qb || 0); });
+    const zOf = v => (v === '' || v === null || v === undefined || !isFinite(+v) || +v * 1000 >= g.L - 0.5) ? null : Math.max(0, +v * 1000);
+    const ptH = {}, ptN = {};
+    (R.items || []).forEach((it, i) => { const f = oc.c.f[i]; if (!f || it.kind === 'sw' || it.kind === 'dir') return; const Hv = f * (dir === 'y' ? it.Hh || 0 : it.Hb || 0), zh = zOf(it.zH), zn = zOf(it.zN);
+      if (zh === null) H0 += Hv; else if (Hv) ptH[zh] = (ptH[zh] || 0) + Hv;
+      if (zn !== null && it.N) { const q = ptN[zn] || { N: 0, M: 0 }; q.N += f * it.N; q.M += f * it.N * (dir === 'y' ? it.eh || 0 : it.eb || 0) / 1000; ptN[zn] = q; }
+      q0 += f * (dir === 'y' ? it.qh || 0 : it.qb || 0); });
+    // siły skupione na wysokości słupa: pozioma H (strzałka) i pionowa N na wsporniku (z mimośrodem – moment N·e)
+    Object.keys(ptH).forEach(k => { const z = +k, v = ptH[k], sg = v > 0 ? 1 : -1, xa = cx + sg * (cw / 2 + 4), y = Y(z / g.L); s += `<g class="ldhit" data-ld="H" style="cursor:pointer"><title>Siła pozioma na wysokości ${fmt(z / 1000, 2)} m</title><rect x="${Math.min(xa, xa + sg * 70)}" y="${y - 10}" width="70" height="20" fill="transparent"/></g><g stroke="${C.acc}" fill="${C.acc}"><line x1="${xa + sg * 30}" y1="${y}" x2="${xa}" y2="${y}" stroke-width="1.6"/><path d="M${xa},${y} l${sg * 8},-4 v8z"/></g>` + tx(xa + sg * 32, y - 4, `H = ${fmt(Math.abs(v), 1)} kN`, { fs: 9, c: C.acc, a: sg > 0 ? 'start' : 'end' }); });
+    Object.keys(ptN).forEach(k => { const z = +k, q = ptN[k], sg = q.M >= 0 ? 1 : -1, xb = cx + sg * (cw / 2), xe = xb + sg * 14, y = Y(z / g.L); s += `<g class="ldhit" data-ld="Nz" style="cursor:pointer"><title>Siła pionowa na wysokości ${fmt(z / 1000, 2)} m (mimośrodowa)</title><rect x="${Math.min(xb, xe + sg * 60)}" y="${y - 34}" width="${Math.abs(xe + sg * 60 - xb)}" height="40" fill="transparent"/></g><path d="M${xb},${y} h${sg * 14} v8 h${-sg * 14}z" fill="${C.conc}" stroke="${C.concL}"/><g stroke="${C.vio}" fill="${C.vio}"><line x1="${xe - sg * 6}" y1="${y - 28}" x2="${xe - sg * 6}" y2="${y}" stroke-width="1.6"/><path d="M${xe - sg * 6 - 4},${y - 7} l4,7 l4,-7z"/></g>` + tx(xe + sg * 2, y - 18, `N = ${fmt(q.N, 0)} kN`, { fs: 9, c: C.vio, a: sg > 0 ? 'start' : 'end', w: 600 }) + (Math.abs(q.M) > 0.05 ? tx(xe + sg * 2, y - 6, `M = ${fmt(Math.abs(q.M), 1)} kNm`, { fs: 8.5, c: C.vio, a: sg > 0 ? 'start' : 'end' }) : ''); });
     if (Math.abs(H0) > 1e-6) { const sg = H0 > 0 ? 1 : -1, xa = cx + sg * (cw / 2 + 4); s += `<g class="ldhit" data-ld="H" style="cursor:pointer"><title>Siła pozioma – kliknij, aby zmienić</title><rect x="${Math.min(xa, xa + sg * 70)}" y="${Y(1) - 6}" width="70" height="20" fill="transparent"/></g><g stroke="${C.acc}" fill="${C.acc}"><line x1="${xa + sg * 34}" y1="${Y(1) + 8}" x2="${xa}" y2="${Y(1) + 8}" stroke-width="1.6"/><path d="M${xa},${Y(1) + 8} l${-sg * 8},-4 v8z"/></g>` + tx(xa + sg * 36, Y(1) + 4, `H = ${fmt(Math.abs(H0), 1)} kN`, { fs: 9.5, c: C.acc, a: sg > 0 ? 'start' : 'end' }); }
     if (Math.abs(q0) > 1e-6) { const sg = q0 > 0 ? 1 : -1; let qq = ''; s += `<g class="ldhit" data-ld="q" style="cursor:pointer"><title>Obciążenie poziome na wysokości – kliknij, aby zmienić</title><rect x="${Math.min(cx - sg * (cw / 2 + 24), cx - sg * (cw / 2))}" y="${Y(7 / 8)}" width="24" height="${Y(1 / 8) - Y(7 / 8)}" fill="transparent"/></g>`; for (let i = 1; i < 8; i++) { const y = Y(i / 8), xa = cx - sg * (cw / 2 + 2); qq += `<line x1="${xa - sg * 18}" y1="${y}" x2="${xa}" y2="${y}"/><path d="M${xa},${y} l${-sg * 5},-2.5 v5z"/>`; } s += `<g stroke="${C.acc}" fill="${C.acc}" stroke-width="1">${qq}<line x1="${cx - sg * (cw / 2 + 20)}" y1="${Y(7 / 8)}" x2="${cx - sg * (cw / 2 + 20)}" y2="${Y(1 / 8)}"/></g>` + tx(cx - sg * (cw / 2 + 20), Y(7 / 8) - 8, `q = ${fmt(Math.abs(q0), 2)} kN/m`, { fs: 9.5, c: C.acc, a: sg > 0 ? 'end' : 'start' }); }
     // wykres
@@ -276,7 +288,7 @@ D.schemeSVG = function (R, S, dir, o) {
       // nośność M_Rd(N_Ed(x)) – zbrojenie przyjęte (ciągła) i wymagane z doboru (przerywana), po stronie momentu
       const sgAt = i => (tot[i] >= 0 ? 1 : -1);
       if (o.mrd) s += `<polyline points="${o.mrd.map((v, i) => `${X(sgAt(i) * Math.abs(v) * 1e6).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.ok}" stroke-width="1.5"/>`;
-      if (o.mrdP) s += `<polyline points="${o.mrdP.map((v, i) => `${X(sgAt(i) * Math.abs(v) * 1e6).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.ok}" stroke-width="1.3" stroke-dasharray="7 3"/>`;
+      if (o.mrdP) s += `<polyline points="${o.mrdP.map((v, i) => `${X(sgAt(i) * Math.abs(v) * 1e6).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ')}" fill="none" stroke="${C.ok}" stroke-width="1.4" ${o.mrd ? 'stroke-dasharray="7 3"' : ''}/>`;
       const ptsT = tot.map((v, i) => `${X(v).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ');
       const pts0 = vals.map((v, i) => `${X(v).toFixed(1)},${Y(i / n).toFixed(1)}`).join(' ');
       s += `<polygon points="${cx},${Y(0)} ${ptsT} ${cx},${Y(1)}" fill="${C.red}" fill-opacity="0.12" stroke="none"/>`;
@@ -287,11 +299,13 @@ D.schemeSVG = function (R, S, dir, o) {
         (o.mrd || o.mrdP ? `<line x1="8" y1="${H - 28}" x2="24" y2="${H - 28}" stroke="${C.ok}" stroke-width="1.5" ${o.mrd ? '' : 'stroke-dasharray="7 3"'}/>` + tx(28, H - 25, o.mrd ? 'M_Rd – przyjęte' + (o.mrdP ? ' (- - wymagane)' : '') : 'M_Rd – zbrojenie wymagane', { fs: 9.5, a: 'start', c: C.ink2 }) : '') + '</g>';
       // proponowane zbrojenie (dobór w tle) – opis przy największym momencie; kliknięcie – wybór średnicy
       if (o.prop || o.cur) {
-        const iM = tot.reduce((a, v, i) => (Math.abs(v) > Math.abs(tot[a]) ? i : a), 0), yy = Math.max(mt + 30, Math.min(H - mb - 30, Y(iM / n) + (iM > n / 2 ? 34 : -34)));
-        const t1 = o.cur ? `przyjęte: ${o.cur}` : '', t2 = o.prop ? (o.prop.pend ? 'wymagane: dobór…' : o.prop.txt ? `wymagane: ${o.prop.txt} ▾` : o.prop.err ? 'wymagane: brak – przekrój za mały' : '') : '';
-        const tw = Math.max(t1.length, t2.length) * 5.6 + 12, bx = Math.max(cx + cw / 2 + 4, Math.min(W - tw - 4, cx + cw / 2 + 10)), lines = [t1, t2].filter(Boolean);
-        s += `<g class="dsel" data-dsel="${dir}" style="cursor:pointer"><title>Zbrojenie wymagane z doboru (najmniejsza masa stali spełniająca wszystkie warunki przy obecnych wymiarach) – kliknij, aby wybrać średnicę prętów</title><rect x="${bx}" y="${yy - 11}" width="${tw}" height="${lines.length * 13 + 5}" rx="4" fill="#ffffff" fill-opacity="0.92" stroke="${C.ok}" stroke-width="1"/>` +
-          lines.map((t, i) => tx(bx + 6, yy + i * 13, t, { fs: 10, a: 'start', c: i === lines.length - 1 && o.prop ? (o.prop.err ? C.red : C.ok) : C.ink, w: 650 })).join('') + '</g>';
+        void tot;
+        const t1 = o.cur ? `przyjęte: ${o.cur}` : '', t2 = o.prop ? (o.prop.pend ? 'dobór zbrojenia…' : o.prop.txt ? `${o.prop.txt} ▾` : o.prop.err ? 'brak – przekrój za mały' : '') : '';
+        const big = !o.cur && o.prop && o.prop.txt, lines = [t1, t2].filter(Boolean), tw = Math.max(big ? 98 : 0, Math.max(t1.length, t2.length) * (big ? 7 : 5.6) + 12), bx = W - tw - 6;
+        const yy = 62;
+        s += `<g class="dsel" data-dsel="${dir}" style="cursor:pointer"><title>Zbrojenie wymagane (dobór: najmniejsza masa stali spełniająca wszystkie warunki przy obecnych wymiarach) – kliknij, aby wybrać średnicę prętów</title><rect x="${bx}" y="${yy - (big ? 22 : 11)}" width="${Math.max(tw, big ? 98 : 0)}" height="${lines.length * 13 + (big ? 18 : 5)}" rx="4" fill="#ffffff" fill-opacity="0.92" stroke="${C.ok}" stroke-width="1"/>` +
+          (big ? tx(bx + 6, yy - 10, 'zbrojenie wymagane', { fs: 8.5, a: 'start', c: C.mut }) : '') +
+          lines.map((t, i) => tx(bx + 6, yy + i * 13 + (big ? 3 : 0), t, { fs: big ? 12 : 10, a: 'start', c: i === lines.length - 1 && o.prop ? (o.prop.err ? C.red : C.ok) : C.ink, w: 700 })).join('') + '</g>';
       }
     } else if (mode === 'N') {
       const mx = Math.max(Math.abs(fr.Nbot), 1), sc = (W - cx - 40) / mx * 0.8;
@@ -335,12 +349,22 @@ D.schemeSVG = function (R, S, dir, o) {
       const n = 40, amp = 22; let p = '';
       for (let i = 0; i <= n; i++) { const xi = i / n; let v = sch === 'cant' ? 1 - Math.cos(Math.PI * xi / 2) : sch === 'ffs' ? (1 - Math.cos(Math.PI * xi)) / 2 : window.EC2.m2Shape(sch, true, xi); p += `${(cx - cw / 2 - 8 - v * amp).toFixed(1)},${Y(xi).toFixed(1)} `; }
       s += `<polyline points="${p}" fill="none" stroke="${C.warn}" stroke-width="1.4" stroke-dasharray="6 3"/>`;
-      s += tx(8, H - 25, `postać wyboczenia (poglądowo), β = ${fmt(B.beta, 2)}`, { fs: 9.5, a: 'start', c: C.ink2 });
+      // wartości: e_i (imperfekcja), e_2 (ugięcie II rzędu) w miejscu największego wygięcia, l₀, λ / λ_lim, N_B
+      let iMx = 0, vMx = 0; for (let i = 0; i <= n; i++) { const xi = i / n, v = sch === 'cant' ? 1 - Math.cos(Math.PI * xi / 2) : sch === 'ffs' ? (1 - Math.cos(Math.PI * xi)) / 2 : window.EC2.m2Shape(sch, true, xi); if (Math.abs(v) > vMx) { vMx = Math.abs(v); iMx = i; } }
+      const NEd = r ? Math.max(1, (B.braced ? fr.Nmid : fr.Nbot)) : 1, e2 = r && isFinite(r.M2) && r.M2 > 0 ? r.M2 / NEd : 0, ym = Y(iMx / n), xm = cx - cw / 2 - 8 - vMx * amp;
+      s += `<circle cx="${xm}" cy="${ym}" r="2.8" fill="${C.warn}"/><line x1="${xm}" y1="${ym}" x2="${cx - cw / 2}" y2="${ym}" stroke="${C.warn}" stroke-width="0.8" stroke-dasharray="2 2"/>`;
+      const eT = (r ? r.ei : 0) + (isFinite(e2) ? e2 : 0);
+      s += tx(xm + 2, ym - 8, `${fmt(eT, 1)}`, { fs: 10, a: 'middle', c: C.red, w: 700 });
+      s += tx(8, H - 52, `e_i = ${fmt(r ? r.ei : 0, 1)} mm, e_2 = ${r && r.slender ? (isFinite(r.M2) ? fmt(e2, 1) : '∞') : '0'} mm → e_i + e_2 = ${fmt(eT, 1)} mm`, { fs: 9.5, a: 'start', c: C.red, w: 600 });
+      s += tx(8, H - 39, `l₀ = ${fmt(B.l0 / 1000, 2)} m (β = ${fmt(B.beta, 2)}), λ = ${fmt(B.lam, 1)} ${r && r.slender ? '>' : '≤'} λ_lim = ${r ? fmt(r.lamLim, 1) : '—'}`, { fs: 9.5, a: 'start', c: C.ink2 });
+      s += tx(8, H - 25, r && r.NB ? `N_B = ${fmt(r.NB / 1e3, 0)} kN, N_Ed = ${fmt(NEd / 1e3, 0)} kN` : `N_Ed = ${fmt(NEd / 1e3, 0)} kN; wygięcie e_i + e_2 – w miejscu największego ugięcia`, { fs: 9, a: 'start', c: C.mut });
     }
     s += tx(8, H - 9, `${(oc.c.name || '').slice(0, 52)}`, { fs: 9, a: 'start', c: C.mut });
   }
   // wymiary
-  s += dimV(cx - cw / 2 - 46, Y(1), Y(0), `L = ${fmt(g.L / 1000, 2)} m`, { fs: 10 });
+  if (o.dims !== false) s += dimV(cx - cw / 2 - 46, Y(1), Y(0), `L = ${fmt(g.L / 1000, 2)} m`, { fs: 10 });
+  // na środku słupa: klasa betonu i przekrój × długość (jak w BelkaŻB 2.10 – na środku przęsła)
+  if (o.cls) s += tx(cx + 3, Y(0.5), `${o.cls} · ${o.sec || ''} × ${fmt(g.L / 1000, 2)} m`, { fs: 8.5, rot: -90, c: C.ink2, w: 600 });
   s += tx(W - 6, 16, `l₀ = ${fmt(B.l0 / 1000, 2)} m`, { fs: 10.5, a: 'end', w: 600, c: C.warn }) + tx(W - 6, 30, `λ = ${fmt(B.lam, 1)}`, { fs: 10, a: 'end', c: C.ink2 });
   return s + '</svg>';
 };
@@ -459,28 +483,32 @@ D.elevationSVG = function (R, S, o) {
   const kx = wcol / depth;
   const cx = 210;
   const Y = z => H - mb - (z - zBot) * k, X = x => cx - wcol / 2 + x * kx;
+  const bF = det.bF !== 'auto' && det.bF ? det.bF : depth + 800, bT = det.bTop !== 'auto' && det.bTop ? det.bTop : depth + 1200;
+  const fw = Math.min(380, Math.max(wcol + 20, bF * kx)), sw = Math.min(400, Math.max(wcol + 30, bT * kx));
   let s = svgOpen(W, H, `class="elevsvg" data-zb="${zBot}" data-zt="${zTop}" data-k="${k}" data-hh="${H}" data-mb="${mb}" data-x0="${X(0)}" data-x1="${X(depth)}" data-l="${L}"`);
-  // fundament / słup niższy
-  if (found) { const fw = wcol + 160; s += `<rect x="${cx - fw / 2}" y="${Y(0)}" width="${fw}" height="${Y(zBot) - Y(0)}" fill="${C.conc}" stroke="${C.concL}"/>` + tx(cx + fw / 2 - 4, Y(zBot) - 6, `fundament h_F = ${det.hF}`, { fs: 9.5, a: 'end', c: C.mut }); }
-  else { s += `<rect x="${X(0)}" y="${Y(0)}" width="${wcol}" height="${Y(zBot) - Y(0)}" fill="${C.conc}" stroke="${C.concL}" stroke-dasharray="5 3"/>` + `<rect x="${cx - wcol / 2 - 70}" y="${Y(0) - 0}" width="${wcol + 140}" height="${Math.max(6, 200 * k)}" fill="${C.conc}" stroke="${C.concL}" transform="translate(0,${-Math.max(6, 200 * k)})" opacity="0"/>` + tx(cx, Y(zBot) - 4, 'słup kondygnacji niższej', { fs: 9.5, c: C.mut }); }
+  // fundament / słup niższy (kliknięcie – wymiary)
+  if (found) s += `<g class="fhit" data-el="found" style="cursor:pointer"><title>Fundament h_F = ${det.hF} mm, szerokość ${fmt(bF, 0)} mm – kliknij, aby zmienić wymiary i zakotwienie prętów startowych</title><rect x="${cx - fw / 2}" y="${Y(0)}" width="${fw}" height="${Y(zBot) - Y(0)}" fill="${C.conc}" stroke="${C.concL}"/>` + tx(cx + fw / 2 - 4, Y(zBot) - 6, `fundament h_F = ${det.hF}`, { fs: 9.5, a: 'end', c: C.mut }) + '</g>';
+  else s += `<g class="fhit" data-el="found" style="cursor:pointer"><title>Słup kondygnacji niższej – kliknij, aby zmienić (fundament / słup niższy)</title><rect x="${X(0)}" y="${Y(0)}" width="${wcol}" height="${Y(zBot) - Y(0)}" fill="${C.conc}" stroke="${C.concL}" stroke-dasharray="5 3"/>` + tx(cx, Y(zBot) - 4, 'słup kondygnacji niższej', { fs: 9.5, c: C.mut }) + '</g>';
   // słup
   s += `<rect x="${X(0)}" y="${Y(L)}" width="${wcol}" height="${Y(0) - Y(L)}" fill="${C.conc}" stroke="${C.concL}" stroke-width="1.2"/>`;
-  // strop / belka u góry
-  const sw = wcol + 180;
-  s += `<rect x="${cx - sw / 2}" y="${Y(L + hTop)}" width="${sw}" height="${Y(L) - Y(L + hTop)}" fill="${C.conc}" stroke="${C.concL}"/>` + tx(cx + sw / 2 - 4, Y(L + hTop) - 4, `strop / belka h = ${hTop}`, { fs: 9.5, a: 'end', c: C.mut });
+  // strop / belka u góry (kliknięcie – wymiary)
+  s += `<g class="fhit" data-el="slab" style="cursor:pointer"><title>Strop / belka nad słupem h = ${hTop} mm – kliknij, aby zmienić</title><rect x="${cx - sw / 2}" y="${Y(L + hTop)}" width="${sw}" height="${Y(L) - Y(L + hTop)}" fill="${C.conc}" stroke="${C.concL}"/>` + tx(cx + sw / 2 - 4, Y(L + hTop) - 4, `strop / belka h = ${hTop}`, { fs: 9.5, a: 'end', c: C.mut }) + '</g>';
   if (cont) s += `<rect x="${X(0)}" y="${Y(zTop)}" width="${wcol}" height="${Y(L + hTop) - Y(zTop)}" fill="none" stroke="${C.concL}" stroke-dasharray="5 3"/>` + tx(cx, Y(zTop) - 4, 'słup kondygnacji wyższej', { fs: 9.5, c: C.mut });
-  // pręty: dwa skrajne w widoku (lewy/prawy)
+  // pręty: dwa skrajne w widoku (lewy / prawy)
   const ysB = lay.bars.map(q => q.y), xb = [Math.min(...ysB), Math.max(...ysB)];
   const main = sch.rows.find(r => r.kind === 'main'), start = sch.rows.find(r => r.kind === 'start');
+  const zEnd = cont ? zTop : L + hTop - cov.cnom - lay.dt - main.d, zbS = -(found && start ? start.inF : 0);
+  const tgt = {};
   xb.forEach((xx, i) => {
-    const x = X(xx);
-    const zEnd = cont ? zTop : L + hTop - cov.cnom - lay.dt - main.d;
+    const x = X(xx), sg = i === 0 ? 1 : -1;
     s += `<line x1="${x}" y1="${Y(0)}" x2="${x}" y2="${Y(zEnd)}" stroke="${C.bar}" stroke-width="2.2"/>`;
-    if (!cont) { const leg = main.leg * kx * 0.6, sg = i === 0 ? 1 : -1; s += `<line x1="${x}" y1="${Y(zEnd)}" x2="${x + sg * Math.max(14, leg)}" y2="${Y(zEnd)}" stroke="${C.bar}" stroke-width="2.2"/>`; }
-    // pręty startowe / z niższej kondygnacji (przesunięte do wnętrza)
-    const xs = x + (i === 0 ? 4 : -4);
-    if (found && start) { const zb = -(det.hF - det.cF - 20), sg = i === 0 ? -1 : 1; s += `<polyline points="${xs + sg * Math.max(16, start.leg * kx * 0.6)},${Y(zb)} ${xs},${Y(zb)} ${xs},${Y(A.l0)}" fill="none" stroke="${C.acc}" stroke-width="2"/>`; }
+    if (!cont) { const leg = Math.max(14, main.leg * kx * 0.6); s += `<line x1="${x}" y1="${Y(zEnd)}" x2="${x + sg * leg}" y2="${Y(zEnd)}" stroke="${C.bar}" stroke-width="2.2"/>`; }
+    // koniec pręta u góry – kliknięcie: odgięcie / zakład
+    s += `<g class="bend" data-end="top" style="cursor:pointer"><title>${cont ? `Zakład z prętami słupa wyżej l₀ = ${fmt(A.l0, 0)} mm` : `Odgięcie w stropie ${fmt(main.leg, 0)} mm`} – kliknij, aby zmienić</title><circle cx="${x}" cy="${Y(zEnd)}" r="6" fill="transparent" stroke="${C.acc}" stroke-width="1" stroke-dasharray="2 2"/></g>`;
+    const xs = x + sg * 4;
+    if (found && start) { const leg = Math.max(16, start.leg * kx * 0.6); s += `<polyline points="${xs - sg * leg},${Y(zbS)} ${xs},${Y(zbS)} ${xs},${Y(A.l0)}" fill="none" stroke="${C.acc}" stroke-width="2"/><g class="bend" data-end="foot" style="cursor:pointer"><title>Pręty startowe: zagłębienie ${fmt(start.inF, 0)} mm, stopka ${fmt(start.leg, 0)} mm – kliknij, aby zmienić</title><circle cx="${xs}" cy="${Y(zbS)}" r="6" fill="transparent" stroke="${C.acc}" stroke-width="1" stroke-dasharray="2 2"/></g>`; }
     else s += `<line x1="${xs}" y1="${Y(zBot)}" x2="${xs}" y2="${Y(A.l0)}" stroke="${C.mut}" stroke-width="2" stroke-dasharray="6 3"/>`;
+    if (i === 1) { tgt.main = [x, Y(Math.min(zEnd, L) * 0.55 + 0.45 * Math.max(A.l0, 0))]; tgt.startUp = [xs, Y(A.l0 * 0.55)]; }
   });
   // strzemiona
   T.pos.forEach(z => { s += `<line x1="${X(0) + 3}" y1="${Y(z)}" x2="${X(depth) - 3}" y2="${Y(z)}" stroke="${C.tie}" stroke-width="1.2"/>`; });
@@ -491,25 +519,38 @@ D.elevationSVG = function (R, S, o) {
   const lapG = (a, b) => `<g class="lapdim" style="cursor:pointer"><title>Długość zakładu prętów l₀ = ${fmt(A.l0, 0)} mm${A.l0man ? ' (zadana ręcznie)' : ''} – kliknij, aby zmienić</title><rect x="${xl - 40}" y="${Y(b)}" width="26" height="${Y(a) - Y(b)}" fill="transparent"/>` + dimV(xl - 26, Y(b), Y(a), `l₀ = ${fmt(A.l0, 0)}${A.l0man ? '*' : ''}`, { fs: 9.5, c: A.l0man ? C.acc : undefined }) + '</g>';
   s += lapG(0, A.l0);
   if (cont) s += lapG(L + hTop, zTop);
-  if (found) s += dimV(xl, Y(0), Y(-(det.hF - det.cF - 20)), `${fmt(det.hF - det.cF - 20, 0)}`, { fs: 9.5 });
-  // strefy strzemion – prawa strona
-  const xr = cx + wcol / 2 + 18;
-  const zones = [[50, T.zBot, T.sRed], [T.zBot, L - T.zTop, T.s], [L - T.zTop, L - 50, T.sRed]].filter(q => q[1] - q[0] > 1);
-  const zk = ['bot', 'mid', 'top'];
-  [[50, T.zBot, T.sRed, 'bot'], [T.zBot, L - T.zTop, T.s, 'mid'], [L - T.zTop, L - 50, T.sRed, 'top']].filter(q => q[1] - q[0] > 1).forEach(([a, b, sp, kz]) => { s += `<g class="stzone" data-tz="${kz}" style="cursor:pointer"><title>Strefa strzemion: ${fmt(b - a, 0)} mm, ⌀${lay.dt} co ${fmt(sp, 0)} mm – kliknij, aby zmienić rozstaw lub długość strefy</title><rect x="${xr - 6}" y="${Y(b)}" width="150" height="${Math.max(6, Y(a) - Y(b))}" fill="transparent"/>` + dimV(xr, Y(b), Y(a), '', {}) + tx(xr + 6, (Y(a) + Y(b)) / 2 + 3.5, `${fmt(b - a, 0)}: ⌀${lay.dt} co ${fmt(sp, 0)}`, { fs: 9.5, a: 'start', c: sp < T.s ? C.tie : C.dim }) + '</g>'; });
-  void zk;
-  // odnośniki pozycji
-  const lab = (n, txt, x, y, xt) => `<line x1="${x}" y1="${y}" x2="${xt}" y2="${y}" stroke="${C.ink2}" stroke-width="0.8"/><circle cx="${xt + 9}" cy="${y}" r="8" fill="#ffffff" stroke="${C.ink}"/>` + tx(xt + 9, y + 3.5, String(n), { fs: 9.5, w: 700 }) + tx(xt + 21, y + 3.5, txt, { fs: 9.5, a: 'start' });
-  const xLab = W - 190;
-  s += lab(main.pos, `${main.n}⌀${main.d} l = ${fmt(main.len, 0)}`, X(xb[1]), Y(L * 0.62), xLab);
-  if (start) s += lab(start.pos, `${start.n}⌀${start.d} l = ${fmt(start.len, 0)}`, X(xb[1]) - 4, Y(A.l0 * 0.5), xLab);
-  const tie = sch.rows.find(r => r.kind === 'tie');
-  s += lab(tie.pos, `${tie.n} szt. ⌀${tie.d} l = ${fmt(tie.len, 0)}`, X(depth * 0.5), Y(L * 0.42 - (T.pos.length ? 0 : 0)), xLab);
-  const pins = sch.rows.filter(r => r.kind === 'pin');
-  pins.forEach((p, i) => { s += lab(p.pos, `${p.n} szt. ⌀${p.d} l = ${fmt(p.len, 0)}`, X(depth * 0.3), Y(L * (0.32 - i * 0.07)), xLab); });
+  if (found && start) s += `<g class="fhit" data-el="found" style="cursor:pointer">${dimV(xl, Y(0), Y(zbS), `${fmt(start.inF, 0)}`, { fs: 9.5 })}</g>`;
+  // strefy strzemion – prawa strona: linia wymiarowa z opisem pionowym, uchwyty granic stref (przeciąganie)
+  const xr = cx + wcol / 2 + 16;
+  [[50, T.zBot, T.sRed, 'bot'], [T.zBot, L - T.zTop, T.s, 'mid'], [L - T.zTop, L - 50, T.sRed, 'top']].filter(q => q[1] - q[0] > 1).forEach(([a, b, sp, kz]) => {
+    const yA = Y(a), yB = Y(b), lab = `${fmt(b - a, 0)}: ⌀${lay.dt} co ${fmt(sp, 0)}`;
+    s += `<g class="stzone" data-tz="${kz}" style="cursor:pointer"><title>Strefa strzemion: ${fmt(b - a, 0)} mm, ⌀${lay.dt} co ${fmt(sp, 0)} mm – kliknij, aby zmienić rozstaw lub długość strefy</title><rect x="${xr - 6}" y="${yB}" width="22" height="${Math.max(6, yA - yB)}" fill="transparent"/>` + dimV(xr, yB, yA, '', {}) +
+      (yA - yB > lab.length * 5.4 + 6 ? tx(xr + 11, (yA + yB) / 2, lab, { fs: 9.5, rot: -90, c: sp < T.s ? C.tie : C.dim }) : tx(xr + 11, (yA + yB) / 2 + 3, `co ${fmt(sp, 0)}`, { fs: 8.5, c: sp < T.s ? C.tie : C.dim, a: 'start' })) + '</g>';
+  });
+  [['bot', T.zBot], ['top', L - T.zTop]].forEach(([kz, z]) => { if (z <= 0 || z >= L) return; s += `<g class="zdrag" data-zd="${kz}" style="cursor:ns-resize"><title>Przeciągnij, aby zmienić długość strefy zagęszczenia ${kz === 'bot' ? 'u dołu' : 'u góry'} (${fmt(kz === 'bot' ? T.zBot : T.zTop, 0)} mm)</title><rect x="${xr - 10}" y="${Y(z) - 5}" width="20" height="10" fill="transparent"/><line x1="${xr - 8}" y1="${Y(z)}" x2="${xr + 8}" y2="${Y(z)}" stroke="${C.acc}" stroke-width="2.4"/><path d="M${xr},${Y(z) - 7} l-3,3 h6z M${xr},${Y(z) + 7} l-3,-3 h6z" fill="${C.acc}"/></g>`; });
+  // odnośniki pozycji: opis na półce poziomej, ukośna linia ze strzałką dokładnie do pręta / strzemienia
+  const tie = sch.rows.find(r => r.kind === 'tie'), pins = sch.rows.filter(r => r.kind === 'pin');
+  const zNear = zt => T.pos.reduce((a, z) => (Math.abs(z - zt) < Math.abs(a - zt) ? z : a), T.pos[0]);
+  const items = [];
+  items.push({ pos: main.pos, txt: `${main.n}⌀${main.d} l = ${fmt(main.len, 0)}`, t: tgt.main });
+  if (start) items.push({ pos: start.pos, txt: `${start.n}⌀${start.d} l = ${fmt(start.len, 0)}`, t: tgt.startUp });
+  const zT1 = zNear(L * 0.4); items.push({ pos: tie.pos, txt: `${tie.n} szt. ⌀${tie.d} l = ${fmt(tie.len, 0)}`, t: [X(depth * 0.72), Y(zT1)] });
+  pins.forEach((p, i) => { const zp = zNear(L * (0.3 - i * 0.06)); items.push({ pos: p.pos, txt: `${p.n} szt. ⌀${p.d} l = ${fmt(p.len, 0)}`, t: [X(depth * (0.4 - i * 0.1)), Y(zp)] }); });
+  const xLab = xr + 46, rowH = 22;
+  items.sort((a, b2) => a.t[1] - b2.t[1]);
+  let yPrev = -Infinity;
+  items.forEach(it => {
+    let yl = Math.max(it.t[1] - 26, yPrev + rowH, mt + 14); yl = Math.min(yl, H - mb - 4); yPrev = yl;
+    const tw = it.txt.length * 5.6 + 24, x0 = xLab, y0 = yl + 4;
+    const dx = it.t[0] - x0, dy = it.t[1] - y0, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, ah = 7, aw = 3.2;
+    const bx = it.t[0] - ux * ah, by = it.t[1] - uy * ah;
+    s += `<g class="ldr"><line x1="${x0}" y1="${y0}" x2="${x0 + tw}" y2="${y0}" stroke="${C.ink2}" stroke-width="0.9"/><line x1="${x0}" y1="${y0}" x2="${bx}" y2="${by}" stroke="${C.ink2}" stroke-width="0.9"/>` +
+      `<path d="M${it.t[0]},${it.t[1]} L${bx - uy * aw},${by + ux * aw} L${bx + uy * aw},${by - ux * aw} Z" fill="${C.ink}"/>` +
+      `<circle cx="${x0 + 9}" cy="${yl - 4}" r="7.5" fill="#ffffff" stroke="${C.ink}"/>` + tx(x0 + 9, yl - 0.8, String(it.pos), { fs: 9, w: 700 }) + tx(x0 + 20, yl, it.txt, { fs: 9.5, a: 'start' }) + '</g>';
+  });
   // przekrój A–A
   const za = L * 0.5;
-  s += `<g stroke="${C.ink}" stroke-width="1.2"><line x1="${X(0) - 18}" y1="${Y(za)}" x2="${X(0) - 4}" y2="${Y(za)}"/><line x1="${X(depth) + 4}" y1="${Y(za)}" x2="${X(depth) + 18}" y2="${Y(za)}"/></g>` + tx(X(0) - 22, Y(za) + 4, 'A', { fs: 11, w: 700, a: 'end' }) + tx(X(depth) + 22, Y(za) + 4, 'A', { fs: 11, w: 700, a: 'start' });
+  s += `<g stroke="${C.ink}" stroke-width="1.2"><line x1="${X(0) - 18}" y1="${Y(za)}" x2="${X(0) - 4}" y2="${Y(za)}"/><line x1="${X(depth) + 4}" y1="${Y(za)}" x2="${X(depth) + 12}" y2="${Y(za)}"/></g>` + tx(X(0) - 22, Y(za) + 4, 'A', { fs: 11, w: 700, a: 'end' });
   s += tx(8, 16, 'Widok słupa – płaszczyzna h (rysunek poglądowy, wymiary w mm)', { fs: 11, w: 650, a: 'start' });
   return s + '</svg>';
 };
@@ -525,9 +566,13 @@ D.extractsSVG = function (R, S, o) {
     s += `<circle cx="20" cy="${y - 6}" r="9" fill="#ffffff" stroke="${C.ink}"/>` + tx(20, y - 2.5, String(r.pos), { fs: 10, w: 700 }) + tx(34, y - 2, `${r.n}×⌀${r.d}`, { fs: 10.5, w: 650, a: 'start' }) + tx(34, y + 11, r.name.slice(0, 18), { fs: 8.5, a: 'start', c: C.mut });
     const col = r.kind === 'tie' || r.kind === 'pin' ? C.tie : r.kind === 'start' ? C.acc : C.bar;
     if (r.shape === 'I') s += `<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="${col}" stroke-width="2.4"/>` + tx((x0 + x1) / 2, y - 6, fmt(r.straight, 0), { fs: 10 });
-    else if (r.shape === 'L') { const lg = Math.max(20, Math.min(60, r.leg / r.len * (x1 - x0) * 2)); s += `<polyline points="${x0},${y - lg} ${x0},${y} ${x1},${y}" fill="none" stroke="${col}" stroke-width="2.4"/>` + tx((x0 + x1) / 2, y - 6, fmt(r.straight, 0), { fs: 10 }) + tx(x0 - 6, y - lg / 2 + 3, fmt(r.leg, 0), { fs: 10, a: 'end' }); }
-    else if (r.shape === 'S') { const bt = r.bt, ht = r.ht, sc = Math.min(44 / ht, 120 / bt), w = bt * sc, h = ht * sc, xx = x0 + 30; s += `<rect x="${xx}" y="${y - h / 2 - 4}" width="${w}" height="${h}" rx="3" fill="none" stroke="${col}" stroke-width="2"/><line x1="${xx + 3}" y1="${y - h / 2 - 1}" x2="${xx + 11}" y2="${y - h / 2 + 7}" stroke="${col}" stroke-width="2"/><line x1="${xx + 1}" y1="${y - h / 2 + 3}" x2="${xx + 9}" y2="${y - h / 2 + 11}" stroke="${col}" stroke-width="2"/>` + tx(xx + w / 2, y - h / 2 - 8, fmt(bt, 0), { fs: 9.5 }) + tx(xx + w + 6, y, fmt(ht, 0), { fs: 9.5, a: 'start' }) + tx(xx + w + 60, y + 3, `haki 135°: ${fmt(r.hook, 0)} mm`, { fs: 9.5, a: 'start', c: C.mut }); }
-    else if (r.shape === 'O') { s += `<circle cx="${x0 + 50}" cy="${y - 4}" r="22" fill="none" stroke="${col}" stroke-width="2"/>` + tx(x0 + 82, y, `⌀ osi ${fmt(r.Dt, 0)}, haki ${fmt(r.hook, 0)}`, { fs: 9.5, a: 'start' }); }
+    else if (r.shape === 'L') {
+      // zagięcie łukiem o średnicy trzpienia wg tab. 8.1N (4⌀ dla ⌀ ≤ 16, 7⌀ dla ⌀ > 16) – promień w skali rysunku pręta
+      const lg = Math.max(20, Math.min(60, r.leg / r.len * (x1 - x0) * 2)), km = r.d <= 16 ? 4 : 7, phm = km * r.d, sc = (x1 - x0) / Math.max(1, r.straight), rr = Math.max(3, Math.min(lg - 4, phm / 2 * sc * 6));
+      s += `<path d="M${x0},${y - lg} V${y - rr} A${rr},${rr} 0 0 0 ${x0 + rr},${y} H${x1}" fill="none" stroke="${col}" stroke-width="2.4"/>` + tx((x0 + x1) / 2, y - 6, fmt(r.straight, 0), { fs: 10 }) + tx(x0 - 6, y - lg / 2 + 3, fmt(r.leg, 0), { fs: 10, a: 'end' }) + tx(x0 + rr + 6, y + 12, `φ_m = ${km}⌀ = ${phm}`, { fs: 9, a: 'start', c: C.mut });
+    }
+    else if (r.shape === 'S') { const bt = r.bt, ht = r.ht, sc = Math.min(44 / ht, 120 / bt), w = bt * sc, h = ht * sc, xx = x0 + 30; s += `<rect x="${xx}" y="${y - h / 2 - 4}" width="${w}" height="${h}" rx="3" fill="none" stroke="${col}" stroke-width="2"/><line x1="${xx + 3}" y1="${y - h / 2 - 1}" x2="${xx + 11}" y2="${y - h / 2 + 7}" stroke="${col}" stroke-width="2"/><line x1="${xx + 1}" y1="${y - h / 2 + 3}" x2="${xx + 9}" y2="${y - h / 2 + 11}" stroke="${col}" stroke-width="2"/>` + tx(xx + w / 2, y - h / 2 - 8, fmt(bt, 0), { fs: 9.5 }) + tx(xx + w + 6, y, fmt(ht, 0), { fs: 9.5, a: 'start' }) + tx(xx + w + 60, y + 3, `haki 135°: ${fmt(r.hook, 0)} mm · φ_m = 4⌀ = ${4 * r.d} mm`, { fs: 9.5, a: 'start', c: C.mut }); }
+    else if (r.shape === 'O') { s += `<circle cx="${x0 + 50}" cy="${y - 4}" r="22" fill="none" stroke="${col}" stroke-width="2"/>` + tx(x0 + 82, y, `⌀ osi ${fmt(r.Dt, 0)}, haki ${fmt(r.hook, 0)}, φ_m = 4⌀ = ${4 * r.d}`, { fs: 9.5, a: 'start' }); }
     else if (r.shape === 'P') { s += `<polyline points="${x0 + 10},${y - 12} ${x0},${y} ${x0 + 160},${y} ${x0 + 150},${y - 12}" fill="none" stroke="${col}" stroke-width="2"/>` + tx(x0 + 80, y - 6, fmt(r.len - 2 * r.hook, 0), { fs: 9.5 }); }
     s += tx(W - 10, y + 3, `l = ${fmt(r.len, 0)} mm`, { fs: 10.5, a: 'end', w: 650 });
   });

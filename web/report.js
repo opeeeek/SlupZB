@@ -71,6 +71,9 @@ function partData(R, S, h, full) {
   c += eq('c_{min}', 'max(c_{min,b}; c_{min,dur} + Δc_{dur,γ} − Δc_{dur,st} − Δc_{dur,add}; 10 mm)', '', `${cov.cmin_sw} / ${cov.cmin_main}`, 'mm (strzemię / pręt)', '4.4.1.2');
   c += eq('c_{nom}', 'max(c_{min,s} + Δc_{dev}; c_{min,pręt} + Δc_{dev} − ⌀_{t})', `max(${cov.cmin_sw} + ${cov.dcdev}; ${cov.cmin_main} + ${cov.dcdev} − ${cov.dSw})`, f(cov.req, 0), 'mm → ' + cov.reqR + ' mm', '4.4.1.1');
   c += line(`Przyjęto otulinę strzemion c<sub>nom</sub> = <b>${cov.cnom} mm</b>${cov.manual ? ' (podana ręcznie)' : ''} ${cov.cnom >= cov.reqR ? '<span class="ok">✔</span>' : '<span class="fail">✖ mniej niż wymagane</span>'}; minimalna klasa betonu: ${cov.minCls} (${cov.minFrom}) ${cov.minOk ? '<span class="ok">✔</span>' : '<span class="warn">⚠ klasa betonu niższa od zalecanej</span>'}`, 'zał. E');
+  if (R.lay && R.lay.cf && S.env.cf && ['top', 'bot', 'lft', 'rgt'].some(k => S.env.cf[k] !== 'auto')) { const N = { top: 'górny', bot: 'dolny', lft: 'lewy', rgt: 'prawy' }; c += line(`Otulina zadana osobno dla boków: ${['top', 'bot', 'lft', 'rgt'].map(k => `bok ${N[k]} ${R.lay.cf[k]} mm${S.env.cf[k] !== 'auto' ? (R.lay.cf[k] >= cov.reqR ? ' ✔' : ' ✖') : ''}`).join(', ')}`); }
+  if (R.dg && R.dg.auto) c += line(`Maksymalny wymiar kruszywa dobrany automatycznie: d<sub>g</sub> = ${R.dg.sel} mm${isFinite(R.dg.lim) ? ` (najmniejszy prześwit prętów ${f(R.dg.lim + 5, 0)} mm ≥ d<sub>g</sub> + 5 mm)` : ''}`, '8.2(2)');
+  if (S.mat.autoC) c += line(`Klasa betonu „Auto”: ${esc(S.mat.concrete)} – ${S.mat.cDes ? 'podniesiona w doborze zbrojenia' : 'minimalna dla klas ekspozycji'}`, 'zał. E');
   o += sec('cov', c);
   // obciążenia
   o += H2(S.loads.mode === 'direct' ? 'Siły obliczeniowe (wprowadzone)' : 'Obciążenia i kombinacje');
@@ -83,9 +86,11 @@ function partData(R, S, h, full) {
     R.items.forEach(it => {
       if (it.kind === 'sw') { o += line(`<b>G₀</b> – ciężar własny słupa: 25 kN/m³ × ${f(g.Ac / 1e6, 4)} m² = ${f(g.selfW, 2)} kN/m; u podstawy ${f(g.selfW * g.L / 1000, 1)} kN`); return; }
       const parts = [];
-      if (it.N) parts.push(`N = ${f(it.N, 1)} kN`); if (it.eh) parts.push(`e<sub>h</sub> = ${f(it.eh, 0)} mm`); if (it.eb) parts.push(`e<sub>b</sub> = ${f(it.eb, 0)} mm`);
+      const zt = v => v !== '' && v !== undefined && v !== null && +v * 1000 < g.L - 0.5 ? ` na wysokości z = ${f(+v, 2)} m od podstawy` : '';
+      if (it.N) parts.push(`N = ${f(it.N, 1)} kN${zt(it.zN)}${it.fromAbove ? ` (w tym z kondygnacji wyżej ${f(it.fromAbove, 1)} kN)` : ''}`); if (it.eh) parts.push(`e<sub>h</sub> = ${f(it.eh, 0)} mm`); if (it.eb) parts.push(`e<sub>b</sub> = ${f(it.eb, 0)} mm`);
+      if (it.zN !== '' && it.zN !== undefined && zt(it.zN) && (it.eh || it.eb)) parts.push(`moment skupiony N·e w miejscu przyłożenia (wspornik / belka oparta na słupie)`);
       if (it.Myt || it.Myb) parts.push(`M<sub>y</sub>: głowica ${f(it.Myt, 2)}, podstawa ${f(it.Myb, 2)} kNm`); if (it.Mzt || it.Mzb) parts.push(`M<sub>z</sub>: głowica ${f(it.Mzt, 2)}, podstawa ${f(it.Mzb, 2)} kNm`);
-      if (it.Hh) parts.push(`H<sub>h</sub> = ${f(it.Hh, 2)} kN`); if (it.Hb) parts.push(`H<sub>b</sub> = ${f(it.Hb, 2)} kN`); if (it.qh) parts.push(`q<sub>h</sub> = ${f(it.qh, 2)} kN/m`); if (it.qb) parts.push(`q<sub>b</sub> = ${f(it.qb, 2)} kN/m`);
+      if (it.Hh) parts.push(`H<sub>h</sub> = ${f(it.Hh, 2)} kN${zt(it.zH)}`); if (it.Hb) parts.push(`H<sub>b</sub> = ${f(it.Hb, 2)} kN${zt(it.zH)}`); if (it.qh) parts.push(`q<sub>h</sub> = ${f(it.qh, 2)} kN/m`); if (it.qb) parts.push(`q<sub>b</sub> = ${f(it.qb, 2)} kN/m`);
       o += line(`<b>${esc(it.id)}</b> – ${esc(it.name || '')} (${it.perm ? 'stałe' : esc(it.psi.name)}${it.pm ? ', działa w obu kierunkach ±' : ''}${it.perm ? '' : `; ψ₀ = ${f(it.psi.p0, 2)}, ψ₁ = ${f(it.psi.p1, 2)}, ψ₂ = ${f(it.psi.p2, 2)}`}): ${parts.join('; ') || 'brak wartości'}`);
     });
     o += H3('Kombinacje oddziaływań');

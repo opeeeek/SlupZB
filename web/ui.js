@@ -2496,7 +2496,7 @@ async function cloudDelete(id) {
 
 function about() {
   const m = $('#modal');
-  m.innerHTML = `<div class="dlg"><h3>SłupŻB 1.3 – słupy żelbetowe wg Eurokodu 2</h3>
+  m.innerHTML = `<div class="dlg"><h3>SłupŻB 1.4 – słupy żelbetowe wg Eurokodu 2</h3>
   <p>Wymiarowanie i sprawdzanie słupów żelbetowych wg PN-EN 1992-1-1 (parametry krajowe wg Załącznika Krajowego PL: γ<sub>c</sub> = 1,4, γ<sub>s</sub> = 1,15, α<sub>cc</sub> = 1,0, ⌀<sub>min</sub> = 12 mm), kombinacje wg PN-EN 1990, odporność ogniowa wg PN-EN 1992-1-2 (metoda A).</p>
   <ul>
   <li><b>Przekroje</b> – prostokątne b × h, okrągłe ⌀D, pierścieniowe ⌀D × t (jedna lub dwie warstwy prętów), teowe (T) i kątowe (L); pręty narożne i pośrednie o różnych średnicach, strzemiona dla każdego prostokąta składowego, szpilki z warunku 9.5.3(6); dla T i L nośność w płaszczyźnie z osią obojętną obróconą (drugi moment = 0) i osie główne bezwładności.</li>

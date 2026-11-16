@@ -292,6 +292,9 @@ D.schLoads = function (R, dir, o) {
     // siły obliczeniowe podane wprost – N_Ed wybranej kombinacji
     return `<g ${hit({}, 'N')}><title>Siła podłużna N_Ed – kliknij, aby zmienić</title><rect x="${cx - 70}" y="${tipY - 38}" width="80" height="40" fill="transparent"/><g stroke="${C.vio}" fill="${C.vio}"><line x1="${cx}" y1="${tipY - 34}" x2="${cx}" y2="${tipY}" stroke-width="1.8"/><path d="M${cx - 4},${tipY - 8} l4,8 l4,-8z"/></g>` + tx(cx - 6, tipY - 24, `N_Ed = ${fmt(o.NT / 1e3, 0)} kN`, { fs: 10, c: C.vio, a: 'end', w: 600 }) + '</g>';
   }
+  // ciężar własny (G₀) – opis przy podstawie; wyłączony – wyszarzony „(pominięty)” (jak w BelkaŻB 2.10.2)
+  { const on = !!(R.S && R.S.loads && R.S.loads.sw), G0 = (g.selfW || 0) * g.L / 1e3;
+    s += `<g opacity="${on ? 1 : 0.5}"><title>${on ? `Ciężar własny słupa G₀ = ${fmt(G0, 1)} kN (${fmt((g.selfW || 0), 2)} kN/m) – wyłączenie: pole w legendzie` : 'Ciężar własny pominięty – włącz polem w legendzie'}</title><line x1="${cx}" y1="${Y(0.9)}" x2="${cx}" y2="${Y(0.1)}" stroke="${D.KC.sw}" stroke-width="0.8" stroke-dasharray="2 4"/>` + tx(cx - 24, Y(0) + 11, on ? `G₀ ${fmt(G0, 1)} kN` : 'G₀ (pominięty)', { fs: 8, c: on ? D.KC.sw : C.mut, a: 'end' }) + '</g>'; }
   // siły pionowe w głowicy – strzałki obok siebie (długość ~ wartość)
   const nTop = its.filter(it => it.N && zOf(it.zN) === null);
   if (nTop.length) {

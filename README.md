@@ -1,4 +1,4 @@
-# SłupŻB 1.3 – obliczenia słupów żelbetowych wg PN-EN 1992-1-1
+# SłupŻB 1.4 – obliczenia słupów żelbetowych wg PN-EN 1992-1-1
 
 Program analogiczny do BelkaŻB (ten sam układ, wygląd i sposób pracy), przeznaczony do wymiarowania i sprawdzania słupów żelbetowych.
 
@@ -6,6 +6,21 @@ Trzy postacie tej samej aplikacji (wspólny kod z katalogu `web/`):
 - `SlupZB.exe` – program dla Windows 10/11 (jeden plik, bez instalacji, WebView2); projekty `*.slup`, autozapis w `%LOCALAPPDATA%\SlupZB`,
 - `app/app.html` – plik do otwarcia w dowolnej przeglądarce (offline),
 - `webapp/slupzb.html` – wersja do publikacji jako strona claude.ai (artefakt): „Moje projekty” na koncie, pobieranie projektu i raportu.
+
+## Poprawki 1.4 – schemat, zmienny przekrój, haki i odgięcia prętów
+
+- **Schemat w Danych – zaznaczanie jak w BelkaŻB:** lewy przycisk zaznacza słup (podświetlenie, wiersz „Zaznaczony: … · obciążenia… · przekrój… · podparcie… · odznacz (Esc)”), dwuklik – dodanie obciążenia na klikniętej wysokości, prawy przycisk – menu. Klik nie otwiera już od razu okien.
+- **Każde obciążenie osobno na schemacie:** siły pionowe w głowicy rysowane obok siebie (G1, Q1, … z wartością charakterystyczną, długość strzałki ~ wartość, mimośród e), siły poziome, obciążenia rozłożone i siły na wysokości (wspornik) – każde jako osobna strzałka / pasmo w kolorze z legendy, kliknięcie otwiera to obciążenie. N<sub>Ed</sub> kombinacji – w wierszu kombinacji pod schematem. Ciężar własny G₀ opisany przy podstawie (wyłączony – wyszarzony „pominięty”).
+- **Schemat statyczny z obciążeniami w zakładce Wykresy** (obie płaszczyzny, obok wykresów na wysokości) – kliknięcie obciążenia / podpory jak w Danych.
+- **Schematy typowe** (jak „wspornik”, „utwierdzony” w BelkaŻB): pole „Schemat statyczny” i okno „Schematy typowe…” z ikonami – przegub–przegub, wspornik, utwierdzony–przegub, utwierdzony obustronnie, utwierdzony z głowicą przesuwną, rama usztywniona i nieusztywniona (k₁, k₂), słup hali (wspornik / przegub ze stężeniem, l₀,b = 0,5·l), ostatnia kondygnacja (pręty kotwione w stropie).
+- **Znaczniki ✔ / ✖ / ? przy wymiarach przekroju** w Danych (b, h, D, wymiary T, L, rury) – wynik doboru w tle: przekrój wystarczający, za mały (z propozycją – kliknięcie ✖ przyjmuje) albo w trakcie sprawdzania.
+- **„+ zmienny przekrój na wysokości słupa”** pod wymiarami przekroju (jak „+ zmienny przekrój w tym przęśle”): odcinki od–do z innym b × h (⌀D), η odcinka przy wierszu. Obliczenia: M<sub>Ed</sub> ≤ M<sub>Rd</sub>(N<sub>Ed</sub>) przekroju odcinka w jego punktach, rozstaw prętów, strzemiona (najmniejszy wymiar), uwaga o smukłości odcinka. Rysunki: schemat (szerokość odcinka), widok słupa (uskoki, pręty z odgięciem 1:6), 3D.
+- **Chip „słup smukły – II rząd”** przenosi do sprawdzenia smukłości w Podsumowaniu.
+- **Haki strzemion i szpilek jak w BelkaŻB:** strzemię owinięte wokół prętów narożnych (łuk o promieniu φ<sub>m</sub>/2 + ⌀/2 wg tab. 8.1N), haki 135° owinięte wokół pręta z prostym odcinkiem skierowanym do wnętrza (90° – wzdłuż ramion); szpilki z hakami wokół prętów skrajnych – przekrój, okna przekroju, wyciągi.
+- **Promienie gięcia w skali:** odgięcia prętów w stropie i stopki prętów startowych na widoku słupa – łuki φ<sub>m</sub> = 4⌀ / 7⌀ (tab. 8.1N) w skali rysunku; na wyciągach promienie w skali ramienia.
+- **Pręty ściskane do słupa wyżej z odgięciem (butelkowanie):** pręty słupa dolnego przedłużone do słupa wyżej na długość zakładu l₀ i odgięte do wnętrza o e<sub>k</sub> = ⌀ (+ zmniejszenie przekroju słupa wyżej) z nachyleniem 1:6, odgięcie w grubości stropu (gdy dłuższe – dodatkowe strzemię w miejscu odgięcia); pręty słupa wyżej obok prętów odgiętych. Zmniejszenie przekroju > 75 mm – osobne pręty startowe słupa wyżej. Wyciąg (kształt odgięty a / l<sub>k</sub> / b), zestawienie stali, 3D, DXF, raport. Okno „Góra słupa” (klik w strop): odgięcie / proste, przekrój słupa wyżej (w modelu wielokondygnacyjnym – z kondygnacji wyżej).
+- **Otulina na widokach przekrojów:** opis „c<sub>nom</sub> = … mm ✎” pod przekrojem (także w Danych, w oknie przekroju i przekroju na wysokości) – kliknięcie otwiera okno otuliny; znaczniki otuliny przy krawędziach.
+- Siła poprzeczna na wykresach: I rząd z MES (bez sztucznych skoków od momentów skupionych N·e) + przyrost od II rzędu.
 
 ## Poprawki 1.3 – dalsze funkcje z BelkaŻB (do wersji 2.10.2)
 

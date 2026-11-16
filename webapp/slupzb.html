@@ -790,6 +790,7 @@ svg.elevsvg .zdrag:hover line { stroke-width: 3.4; }
 .schch .schpair { display: flex; gap: 6px; }
 .fl2 { display: flex; gap: 6px; } .fl2 input { width: 84px; }
 .covtxt:hover text { text-decoration: underline; }
+.schemesvg text { pointer-events: none; }
 
 /* wygenerowane przez gen_svgtheme.py – kolory rysunków SVG */
 :root { --sv-1b2230: #1b2230; --sv-1d2a3f: #1d2a3f; --sv-1d3f78: #1d3f78; --sv-1d5bb8: #1d5bb8; --sv-1d7f3c: #1d7f3c; --sv-39414f: #39414f; --sv-3d4656: #3d4656; --sv-4a5466: #4a5466; --sv-5d6778: #5d6778; --sv-6a3fb5: #6a3fb5; --sv-7a3db8: #7a3db8; --sv-7a8494: #7a8494; --sv-7fa3e0: #7fa3e0; --sv-9aa3b0: #9aa3b0; --sv-9b1c22: #9b1c22; --sv-a04848: #a04848; --sv-a35d00: #a35d00; --sv-b5651d: #b5651d; --sv-c0262d: #c0262d; --sv-c9ced6: #c9ced6; --sv-c9d4e6: #c9d4e6; --sv-d9dde3: #d9dde3; --sv-dbe7fb: #dbe7fb; --sv-e08a8a: #e08a8a; --sv-e6a35a: #e6a35a; --sv-eceef1: #eceef1; --sv-eef0f3: #eef0f3; --sv-f3f4f6: #f3f4f6; --sv-ffcccc: #ffcccc; --sv-ffddbb: #ffddbb; --sv-ffffff: #ffffff; }
@@ -3319,6 +3320,9 @@ D.schLoads = function (R, dir, o) {
     // siły obliczeniowe podane wprost – N_Ed wybranej kombinacji
     return `<g ${hit({}, 'N')}><title>Siła podłużna N_Ed – kliknij, aby zmienić</title><rect x="${cx - 70}" y="${tipY - 38}" width="80" height="40" fill="transparent"/><g stroke="${C.vio}" fill="${C.vio}"><line x1="${cx}" y1="${tipY - 34}" x2="${cx}" y2="${tipY}" stroke-width="1.8"/><path d="M${cx - 4},${tipY - 8} l4,8 l4,-8z"/></g>` + tx(cx - 6, tipY - 24, `N_Ed = ${fmt(o.NT / 1e3, 0)} kN`, { fs: 10, c: C.vio, a: 'end', w: 600 }) + '</g>';
   }
+  // ciężar własny (G₀) – opis przy podstawie; wyłączony – wyszarzony „(pominięty)” (jak w BelkaŻB 2.10.2)
+  { const on = !!(R.S && R.S.loads && R.S.loads.sw), G0 = (g.selfW || 0) * g.L / 1e3;
+    s += `<g opacity="${on ? 1 : 0.5}"><title>${on ? `Ciężar własny słupa G₀ = ${fmt(G0, 1)} kN (${fmt((g.selfW || 0), 2)} kN/m) – wyłączenie: pole w legendzie` : 'Ciężar własny pominięty – włącz polem w legendzie'}</title><line x1="${cx}" y1="${Y(0.9)}" x2="${cx}" y2="${Y(0.1)}" stroke="${D.KC.sw}" stroke-width="0.8" stroke-dasharray="2 4"/>` + tx(cx - 24, Y(0) + 11, on ? `G₀ ${fmt(G0, 1)} kN` : 'G₀ (pominięty)', { fs: 8, c: on ? D.KC.sw : C.mut, a: 'end' }) + '</g>'; }
   // siły pionowe w głowicy – strzałki obok siebie (długość ~ wartość)
   const nTop = its.filter(it => it.N && zOf(it.zN) === null);
   if (nTop.length) {
@@ -6900,7 +6904,7 @@ async function cloudDelete(id) {
 
 function about() {
   const m = $('#modal');
-  m.innerHTML = `<div class="dlg"><h3>SłupŻB 1.3 – słupy żelbetowe wg Eurokodu 2</h3>
+  m.innerHTML = `<div class="dlg"><h3>SłupŻB 1.4 – słupy żelbetowe wg Eurokodu 2</h3>
   <p>Wymiarowanie i sprawdzanie słupów żelbetowych wg PN-EN 1992-1-1 (parametry krajowe wg Załącznika Krajowego PL: γ<sub>c</sub> = 1,4, γ<sub>s</sub> = 1,15, α<sub>cc</sub> = 1,0, ⌀<sub>min</sub> = 12 mm), kombinacje wg PN-EN 1990, odporność ogniowa wg PN-EN 1992-1-2 (metoda A).</p>
   <ul>
   <li><b>Przekroje</b> – prostokątne b × h, okrągłe ⌀D, pierścieniowe ⌀D × t (jedna lub dwie warstwy prętów), teowe (T) i kątowe (L); pręty narożne i pośrednie o różnych średnicach, strzemiona dla każdego prostokąta składowego, szpilki z warunku 9.5.3(6); dla T i L nośność w płaszczyźnie z osią obojętną obróconą (drugi moment = 0) i osie główne bezwładności.</li>

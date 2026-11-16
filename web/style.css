@@ -788,3 +788,4 @@ svg.elevsvg .zdrag:hover line { stroke-width: 3.4; }
 .schch .schpair { display: flex; gap: 6px; }
 .fl2 { display: flex; gap: 6px; } .fl2 input { width: 84px; }
 .covtxt:hover text { text-decoration: underline; }
+.schemesvg text { pointer-events: none; }

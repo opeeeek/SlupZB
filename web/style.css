@@ -750,7 +750,7 @@ svg.hchart .pinlab:hover rect { fill: #fff6e5; }
 .beamtabs .stkchk { margin: 0 0 0 auto; font-size: 12px; align-self: center; }
 .schtools { display: flex; gap: 4px; flex-wrap: wrap; }
 .parts { margin: 2px 0 8px; }
-.partrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; margin: 3px 0; color: var(--ink2); }
+.partrow { display: grid; gap: 3px; padding: 4px 6px; border-left: 3px solid var(--acc); background: color-mix(in srgb, var(--acc) 5%, transparent); border-radius: 4px; font-size: 12px; margin: 3px 0; color: var(--ink2); }
 .partrow input.txt { width: 56px; height: 26px; padding: 2px 4px; text-align: right; }
 .partrow .pl { font-weight: 600; color: var(--ink); }
 .partrow .pu { margin-left: 4px; }
@@ -782,3 +782,9 @@ tr.off td { opacity: .55; }
 svg.elevsvg .fhit:hover rect { fill: color-mix(in srgb, var(--acc) 14%, var(--sv-eceef1, #eceef1)); }
 svg.elevsvg .bend:hover circle { stroke-width: 2; fill: color-mix(in srgb, var(--acc) 18%, transparent); }
 svg.elevsvg .zdrag:hover line { stroke-width: 3.4; }
+.schsel { font-size: 12px; margin: 2px 0 6px; min-height: 18px; }
+.schsel .mut { color: var(--mut); }
+.schcol.sel rect { filter: drop-shadow(0 0 2px rgba(29, 91, 184, .45)); }
+.schch .schpair { display: flex; gap: 6px; }
+.fl2 { display: flex; gap: 6px; } .fl2 input { width: 84px; }
+.covtxt:hover text { text-decoration: underline; }

@@ -63,7 +63,10 @@ SZX.build = function (R, S) {
   const ysB = lay.bars.map(q => q.y);
   [Math.min(...ysB), Math.max(...ysB)].forEach((xx, i) => {
     const zEnd = cont ? zTop : L + hTop - cov.cnom - lay.dt - main.d;
-    D.line(X(xx), Y(0), X(xx), Y(zEnd), 'ZBR_PODLUZNE');
+    const CK = R.crank, sg = i === 0 ? 1 : -1;
+    if (cont && CK && CK.ek > 0) D.pline([[X(xx), Y(0)], [X(xx), Y(CK.z0)], [X(xx + sg * CK.ek), Y(CK.z1)], [X(xx + sg * CK.ek), Y(zEnd)]], 'ZBR_PODLUZNE');   // odgięcie 1:6 w węźle (butelkowanie)
+    else D.line(X(xx), Y(0), X(xx), Y(zEnd), 'ZBR_PODLUZNE');
+    if (cont && CK && CK.ek > 0) D.line(X(xx), Y(L + hTop), X(xx), Y(zEnd), 'ZBR_STARTOWE');   // pręty słupa wyżej (zakład)
     if (!cont) D.line(X(xx), Y(zEnd), X(xx + (i === 0 ? 1 : -1) * main.leg), Y(zEnd), 'ZBR_PODLUZNE');
     const xs = xx + (i === 0 ? 1 : -1) * main.d;
     if (found && start) { const zb = -(det.hF - det.cF - 20); D.pline([[X(xs + (i === 0 ? -1 : 1) * start.leg), Y(zb)], [X(xs), Y(zb)], [X(xs), Y(A.l0)]], 'ZBR_STARTOWE'); }

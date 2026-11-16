@@ -284,6 +284,8 @@ function normalize(S0) {
   if (!['50', '100'].includes(String(dt.lap))) dt.lap = '100'; dt.lap = String(dt.lap);
   dt.sigma = dt.sigma === 'actual' ? 'actual' : 'fyd';
   dt.l0Man = (dt.l0Man === 'auto' || dt.l0Man === '' || dt.l0Man == null || !isFinite(+dt.l0Man)) ? 'auto' : Math.max(0, +dt.l0Man);
+  dt.crank = dt.crank === 'off' ? 'off' : 'auto';
+  S.upSec = S.upSec && typeof S.upSec === 'object' ? { shape: S.upSec.shape === 'circ' ? 'circ' : S.upSec.shape === 'rect' ? 'rect' : 'other', b: num(S.upSec.b, 0), h: num(S.upSec.h, 0), D: num(S.upSec.D, 0), name: String(S.upSec.name || '') } : null;
   ['legTop', 'footF', 'inF', 'bF', 'bTop'].forEach(k => { dt[k] = (dt[k] === 'auto' || dt[k] === '' || dt[k] == null || !isFinite(+dt[k])) ? 'auto' : Math.max(0, +dt[k]); });
   S.above = Array.isArray(S.above) ? S.above.filter(q => q && isFinite(+q.N)).map(q => ({ kind: q.kind === 'perm' || VAR_KINDS[q.kind] ? q.kind : 'perm', cat: q.cat || 'B', alt: q.alt || 'low', name: String(q.name || ''), N: +q.N, pm: !!q.pm, p0: q.p0, p1: q.p1, p2: q.p2, from: q.from || '' })) : [];
   const F = S.fire;
@@ -993,7 +995,7 @@ function loadItems(S, g) {
     return items;
   }
   let nG = 0, nQ = 0;
-  const own = Lo.items.filter(it => !it.off).map(it => Object.assign({}, it));
+  const own = Lo.items.map((it, i) => Object.assign({}, it, { src: i })).filter(it => !it.off);
   const same = (a, b) => a.kind === b.kind && (a.kind !== 'imp' || a.cat === b.cat) && String(a.name || '').trim().toLowerCase() === String(b.name || '').trim().toLowerCase();
   (S.above || []).forEach(q => { if (!q.N) return; const t = own.find(it => same(it, q)); if (t) { t.N = (+t.N || 0) + q.N; t.fromAbove = (t.fromAbove || 0) + q.N; } else own.push(normItem(Object.assign({}, q, { fromAbove: q.N, aboveOnly: true }))); });
   own.forEach(it => { const perm = it.kind === 'perm'; items.push(Object.assign({}, it, { id: perm ? 'G' + (++nG) : 'Q' + (++nQ), perm, psi: perm ? null : psiOf(it) })); });
@@ -1423,7 +1425,23 @@ function tiesCalc(S, g, lay, anch, sh) {
   const c = S.env.cnomSel === 'manual' ? num(S.env.cnomVal, 30) : null;
   return { dt, dtReq, scl, sclRed, sAuto, sShear, sMan, s, sRed, sRedMan, zBot, zTop, zMid, zBotReq, zTopReq, zMan, lapZone, zB0, pos: P, sets, pB, pM, pT, cman: c };
 }
-function schedule(S, g, lay, cov, anch, ties) {
+// odgięcie prętów słupa dolnego w węźle stropu (butelkowanie): pręty ściskane przechodzą do słupa wyżej na długość zakładu l₀,
+// odsunięte do wnętrza o e_k = ⌀ (pręty słupa wyżej układane obok, na tej samej otulinie) + zmniejszenie przekroju słupa wyżej;
+// nachylenie odgięcia ≤ 1:6 (praktyka wykonawcza, np. IStructE / PN-B-03264 – pręty odgięte w węźle), odgięcie w strefie stropu
+// (koniec – na poziomie górnej powierzchni stropu); przy zmniejszeniu przekroju > 75 mm – zamiast odgięcia osobne pręty startowe
+function crankCalc(S, g, lay) {
+  if (S.det.top !== 'cont' || !lay.n || g.isPoly) return null;
+  const d = lay.dmax, up = S.upSec;
+  let red = 0;
+  const tp = (S.geom.parts || []).find(p => p.z1 * 1000 >= g.L - 1), B0 = tp ? tp.b : g.b, H0 = tp ? tp.h : g.h, D0 = tp ? tp.D : g.D;   // przekrój w głowicy (odcinek zmiennego przekroju)
+  if (up && up.shape !== 'other') { if (g.round && up.shape === 'circ' && up.D) red = Math.max(0, (D0 - up.D) / 2); else if (!g.round && up.shape === 'rect' && up.b && up.h) red = Math.max(0, (B0 - up.b) / 2, (H0 - up.h) / 2); }
+  const zT = g.L + S.det.hTop;
+  if (S.det.crank === 'off') return { off: true, red, d, ek: 0, lk: 0, z0: zT, z1: zT };
+  if (red > 75) return { sep: true, red, d, ek: 0, lk: 0, z0: zT, z1: zT };
+  const ek = d + red, lk = Math.ceil(6 * ek / 10) * 10, z0 = zT - lk;
+  return { ek, lk, z0, z1: zT, red, d, slope: 6, inSlab: lk <= S.det.hTop, Fh: 1 / 6 };
+}
+function schedule(S, g, lay, cov, anch, ties, crank) {
   const rows = [], dt = lay.dt, c = cov.cnom;
   const hook = Math.max(10 * dt, 75);                       // hak 135°: ≥ max(5⌀; 50) – przyjęto max(10⌀; 75 mm) jak w praktyce wykonawczej
   const hookMin = S.stir.hookA === 90 ? Math.max(10 * dt, 70) : Math.max(5 * dt, 50);
@@ -1438,6 +1456,18 @@ function schedule(S, g, lay, cov, anch, ties) {
     const straight = L + lTopStraight;
     const legAuto = top === 'anch' ? ceilTo(Math.max(bendLeg(d), anch.lbd - (S.det.hTop - c)), 10) : 0;
     const leg = top === 'anch' ? (S.det.legTop !== 'auto' ? S.det.legTop : legAuto) : 0;
+    if (top === 'cont' && crank && crank.sep) {
+      // zmiana przekroju > 75 mm: pręty słupa dolnego kończą się w stropie, słup wyżej – osobne pręty startowe zakotwione w słupie dolnym
+      const st = S.det.hTop - c - dt - d;
+      rows.push({ pos: ++pos, kind: 'main', name: 'Pręty podłużne słupa', d, n, len: ceilTo(L + st, 10), straight: ceilTo(L + st, 10), leg: 0, shape: 'I' });
+      rows.push({ pos: ++pos, kind: 'startUp', name: 'Pręty startowe słupa wyżej', d, n, len: ceilTo(anch.lbd + S.det.hTop + anch.l0, 10), straight: ceilTo(anch.lbd + S.det.hTop + anch.l0, 10), leg: 0, shape: 'I', up: true });
+      return;
+    }
+    if (top === 'cont' && crank && crank.ek > 0) {
+      const a = crank.z0, inc = Math.hypot(crank.lk, crank.ek), b = anch.l0;
+      rows.push({ pos: ++pos, kind: 'main', name: 'Pręty podłużne słupa (odgięte)', d, n, len: ceilTo(a + inc + b, 10), straight: ceilTo(a, 10), a: ceilTo(a, 10), b: ceilTo(b, 10), ek: crank.ek, lk: crank.lk, leg: 0, shape: 'K' });
+      return;
+    }
     rows.push({ pos: ++pos, kind: 'main', name: 'Pręty podłużne słupa', d, n, len: ceilTo(straight + leg, 10), straight: ceilTo(straight, 10), leg, shape: top === 'anch' ? 'L' : 'I' });
   });
   if (base === 'found') dias.forEach(d => {
@@ -1580,7 +1610,8 @@ function calc(S0, opts) {
     const Nf = gv.fr.Nbot; R.e0fi = Nf > 0 ? Math.max(Math.abs(gv.y.Mb), Math.abs(gv.y.Mt), Math.abs(gv.z.Mb), Math.abs(gv.z.Mt)) / Nf : 0;
   }
   R.fire = lay.n ? fireCalc(S, g, m, lay, R) : null;
-  R.sched = lay.n ? schedule(S, g, lay, cov, R.anch, R.ties) : null;
+  R.crank = lay.n ? crankCalc(S, g, lay) : null;
+  R.sched = lay.n ? schedule(S, g, lay, cov, R.anch, R.ties, R.crank) : null;
   checksCalc(R, S);
   const bad = R.checks.filter(c => c.status === 'fail');
   R.ok = !R.errors.length && !bad.length && res.length > 0;

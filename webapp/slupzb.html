@@ -751,6 +751,15 @@ svg.hchart .pinlab:hover rect { fill: #fff6e5; }
 .seg.wrap button { margin-bottom: 2px; }
 .beamtabs .stkchk { margin: 0 0 0 auto; font-size: 12px; align-self: center; }
 .schtools { display: flex; gap: 4px; flex-wrap: wrap; }
+.parts { margin: 2px 0 8px; }
+.partrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; margin: 3px 0; color: var(--ink2); }
+.partrow input.txt { width: 56px; height: 26px; padding: 2px 4px; text-align: right; }
+.partrow .pl { font-weight: 600; color: var(--ink); }
+.partrow .pu { margin-left: 4px; }
+.pcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.pcard { display: flex; gap: 8px; align-items: center; text-align: left; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); cursor: pointer; font: inherit; font-size: 12.5px; color: var(--ink); }
+.pcard:hover, .pcard.on { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 8%, var(--panel)); }
+.pcard svg { flex: none; }
 .schtools .btn.on { background: color-mix(in srgb, var(--acc) 14%, var(--panel)); border-color: var(--acc); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin: 4px 0 6px; font-size: 12px; }
 .legend .lgi { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
@@ -1069,6 +1078,8 @@ function normalize(S0) {
   if (S.mat.autoC) { let c = minClsOf(S); if (S.mat.cDes && classIdx(S.mat.cDes) > classIdx(c)) c = S.mat.cDes; S.mat.concrete = c; }
   // kruszywo „Auto”: największa frakcja dopuszczona prześwitem prętów (8.2(2)); rozmieszczenie prętów – dla d_g = 8 mm
   S.mat.dgAuto = S.mat.dgAuto === true; if (S.mat.dgAuto) S.mat.dg = 8;
+  // zmienny przekrój na wysokości (odcinki z0–z1 [m] o innym przekroju: b × h albo ⌀D)
+  { const G = S.geom; G.parts = Array.isArray(G.parts) ? G.parts.map(p => ({ z0: Math.max(0, num(p.z0, 0)), z1: num(p.z1, 0), b: num(p.b, G.b), h: num(p.h, G.h), D: num(p.D, G.D) })).filter(p => p.z1 > p.z0 + 1e-6).slice(0, 6) : []; }
   ['life', 'dcdev', 'dcg', 'dcst', 'dcadd', 'cnomVal'].forEach(k => S.env[k] = num(S.env[k], D.env[k]));
   { const cf0 = S.env.cf && typeof S.env.cf === 'object' ? S.env.cf : {}; S.env.cf = {}; ['top', 'bot', 'lft', 'rgt'].forEach(k => { const v = cf0[k]; S.env.cf[k] = v === undefined || v === null || v === '' || v === 'auto' || !isFinite(+v) ? 'auto' : Math.max(0, +v); }); }
   const Lo = S.loads;
@@ -1951,6 +1962,13 @@ function m2Shape(sch, braced, xi) {
 
 /* ------------------------------------- efekty II rzędu w jednym kierunku */
 // D – dane kierunku: {B, ei, e0, U (krzywe), g, m, phiInf, dEff, Is, Ic, omega, As, Ac}
+// moment obliczeniowy M_Ed(x) kombinacji w kierunku: I rząd + imperfekcja + II rząd (jak wykresy) – N·mm, punkty XI
+function momentsOf(R, oc, dir) {
+  const r = oc[dir], fr = oc.fr, B = R.buck[dir];
+  const M0 = Array.from(fr[dir].M), n = M0.length - 1, M2 = isFinite(r.M2) ? r.M2 : 0;
+  const sgn = v => (r.braced ? (r.tr ? r.sg : r.sEnd) : (v !== 0 ? Math.sign(v) : r.sg)) || 1;
+  return M0.map((v, i) => v + sgn(v) * Math.max(0, fr.Nat(i / n)) * r.ei + sgn(v) * M2 * m2Shape(B.sch, !!r.braced, i / n));
+}
 function evalDir(D, S, fr, frq, opts) {
   const m = D.m, g = D.g, B = D.B, L = g.L, dir = D.dir;
   const M0 = fr[dir].M, V0 = fr[dir].V;
@@ -2353,6 +2371,32 @@ function calc(S0, opts) {
   });
   R.NEdMax = res.length ? Math.max(...res.map(o => o.fr.Nbot)) : 0;
   R.NEdMin = res.length ? Math.min(...res.map(o => o.fr.Ntop)) : 0;
+  // zmienny przekrój na wysokości słupa (odcinki o innym przekroju): te same pręty w geometrii odcinka, nośność M_Rd(N_Ed) odcinka
+  // przy M_Ed(z) (z imperfekcją i efektami II rzędu przekroju podstawowego) i N_Ed(z) w punktach odcinka
+  R.parts = []; R.partRes = [];
+  if ((S.geom.parts || []).length && (S.geom.shape === 'rect' || S.geom.shape === 'circ')) {
+    S.geom.parts.forEach((p, pi) => {
+      const z0 = clamp(p.z0, 0, S.geom.L) * 1000, z1 = clamp(p.z1, 0, S.geom.L) * 1000; if (z1 - z0 < 1) return;
+      const Sp = JSON.parse(JSON.stringify(S)); Sp.geom.parts = []; if (S.geom.shape === 'rect') { Sp.geom.b = p.b; Sp.geom.h = p.h; } else Sp.geom.D = p.D;
+      const Rp = { errors: [], warns: [], infos: [] }; let gp; try { gp = geomCalc(Sp, Rp); } catch (e) { gp = null; }
+      if (!gp || Rp.errors.length) { R.warns.push(`Odcinek ${pi + 1} zmiennego przekroju: ${Rp.errors.join(' ') || 'błędne wymiary'}`); return; }
+      const lp = layoutBars(Sp, gp, cov, m), U = {};
+      DIRS.forEach(d => { U[d] = makeDirULS(gp.parts[d], gp.dir[d].depth, lay.n ? barsDir(lp, gp, d) : [], m); });
+      R.parts.push({ pi, z0, z1, g: gp, lay: lp, U, S: Sp, lab: S.geom.shape === 'rect' ? `${p.b}×${p.h}` : `⌀${p.D}` });
+    });
+    R.parts.forEach(P => DIRS.forEach(d => {
+      let best = null;
+      res.forEach(o => {
+        const tot = momentsOf(R, o, d), n = tot.length - 1, zs = [P.z0, (P.z0 + P.z1) / 2, P.z1].concat(XI.map(x => x * g.L).filter(z => z > P.z0 && z < P.z1));
+        zs.forEach(z => {
+          const xi = clamp(z / g.L, 0, 1), i = Math.round(xi * n), N = o.fr.Nat(xi), e0 = Math.max(P.g.dir[d].depth / 30, 20), Mv = tot[i];
+          const M = Math.max(Math.abs(Mv), S.sec2.e0 ? Math.max(0, N) * e0 : 0), MRd = P.U[d].MRd(N, Mv >= 0 ? 1 : -1), u = MRd === null ? Infinity : MRd > 0 ? M / MRd : (M > 0 ? Infinity : 0);
+          if (!best || u > best.u) best = { u, z, M, MRd: MRd === null ? 0 : MRd, N, ci: o.ci, c: o.c };
+        });
+      });
+      if (best) R.partRes.push(Object.assign({ P, d }, best));
+    }));
+  }
   // zginanie ukośne – metoda włókien dla kombinacji decydujących
   if (lay.n && res.length && !opts.fast) {
     const cand = res.slice().sort((a, b) => (b.biax.u539 || b.u) - (a.biax.u539 || a.u)).slice(0, 4);
@@ -2363,7 +2407,8 @@ function calc(S0, opts) {
   // strzemiona, zakotwienia
   const tension = res.some(o => hasTension(R, o));
   R.anch = anchCalc(S, m, lay.n ? lay : Object.assign({}, lay, { dmax: 16 }), cov, tension);
-  R.ties = tiesCalc(S, g, lay.n ? lay : Object.assign({}, lay, { dmin: 12, dmax: 12, dt: dt0 }), R.anch, R.sh);
+  const gT = R.parts && R.parts.length ? Object.assign({}, g, { dmin: Math.min(g.dmin, ...R.parts.map(P => P.g.dmin)) }) : g;   // rozstaw strzemion – także w odcinkach o mniejszym przekroju
+  R.ties = tiesCalc(S, gT, lay.n ? lay : Object.assign({}, lay, { dmin: 12, dmax: 12, dt: dt0 }), R.anch, R.sh);
   // SGU
   R.sls = lay.n && S.sls.check !== false ? slsCalc(R, S) : null;
   // odporność ogniowa
@@ -2562,7 +2607,7 @@ function slsCalc(R, S) {
 }
 
 /* --------------------------------------------------------------- sprawdzenia */
-const ETA_IDS = new Set(['My', 'Mz', 'biax', 'biaxF', 'Nmax', 'stab', 'Vy', 'Vz', 'Vmaxy', 'Vmaxz', 'sck', 'ssk', 'wk', 'scqp', 'gen']);
+const ETA_IDS = new Set(['My', 'Mz', 'biax', 'biaxF', 'Nmax', 'stab', 'Vy', 'Vz', 'Vmaxy', 'Vmaxz', 'sck', 'ssk', 'wk', 'scqp', 'gen', 'Mpart']);
 function checksCalc(R, S) {
   const C = R.checks, g = R.g, m = R.m, lay = R.lay, cov = R.cov;
   const add = (grp, id, name, ref, Ed, Rd, unit, opt) => {
@@ -2587,6 +2632,17 @@ function checksCalc(R, S) {
   }
   const res = R.res;
   if (!res.length) return;
+  // --- SGN: odcinki zmiennego przekroju (te same pręty w geometrii odcinka)
+  (R.partRes || []).forEach(q => {
+    const P = q.P, pl = q.d === 'y' ? 'h' : 'b', zt = `${(P.z0 / 1000).toFixed(2)}–${(P.z1 / 1000).toFixed(2)} m`;
+    add(gN, 'Mpart', `Odcinek ${P.pi + 1} (z = ${zt}, ${P.lab}) – zginanie z siłą podłużną w płaszczyźnie ${pl}: M_Ed ≤ M_Rd(N_Ed)`, '6.1', q.M / 1e6, q.MRd / 1e6, 'kNm', { ratio: q.u, note: `z = ${(q.z / 1000).toFixed(2)} m; N_Ed = ${(q.N / 1e3).toFixed(1)} kN; ${q.c.name}; II rząd – dla przekroju podstawowego`, at: { part: P.pi, dir: q.d }, sec: 'uls' + q.d });
+  });
+  (R.parts || []).forEach(P => {
+    if (P.lay.issues.length) add(gD, 'fitP', `Odcinek ${P.pi + 1} (${P.lab}) – rozmieszczenie prętów`, '8.2', 1, 0, '', { ratio: Infinity, status: 'fail', note: P.lay.issues.join('; '), fmt: 'text', at: { part: P.pi }, sec: 'det' });
+    if (lay.n && P.lay.minClear < P.lay.smin - 0.5) add(gD, 'spP', `Odcinek ${P.pi + 1} (${P.lab}) – odstęp prętów w świetle ≥ max(⌀; d_g + 5 mm; 20 mm)`, '8.2(2)', P.lay.smin, P.lay.minClear, 'mm', { rel: '≥', at: { part: P.pi }, sec: 'det' });
+    DIRS.forEach(d => { if (P.g.dir[d].i < g.dir[d].i - 1) add(gS, 'lamPart', `Odcinek ${P.pi + 1} (${P.lab}) ma mniejszy promień bezwładności w płaszczyźnie ${d === 'y' ? 'h' : 'b'} niż przekrój podstawowy`, '5.8.3.2', g.dir[d].i, P.g.dir[d].i, 'mm', { rel: '≥', soft: true, status: 'warn', ratio: g.dir[d].i / P.g.dir[d].i, note: 'smukłość i efekty II rzędu liczone dla przekroju podstawowego – przyjmij mniejszy przekrój jako podstawowy (bezpiecznie) albo skróć odcinek', at: { part: P.pi }, sec: 'slen' }); });
+    if (R.ties && P.g.dmin < g.dmin && R.ties.s > Math.min(20 * lay.dmin, P.g.dmin, 400) + 0.5) add(gD, 'stP', `Odcinek ${P.pi + 1} (${P.lab}) – rozstaw strzemion s ≤ min(20⌀; b; 400 mm)`, '9.5.3(3)', R.ties.s, Math.min(20 * lay.dmin, P.g.dmin, 400), 'mm', { at: { part: P.pi }, sec: 'ties' });
+  });
   // --- SGN: zginanie z siłą podłużną (jednokierunkowo)
   const govOf = d => res.reduce((a, o) => (o[d].u > a[d].u ? o : a));
   if (lay.n) {
@@ -4221,8 +4277,10 @@ function buckFields(d) {
 }
 const GROUPS = [
   { id: 'geo', title: 'Przekrój, wysokość i podparcie', items: [
+    { t: 'html', h: () => presetHTML() },
     { k: 'geom.shape', t: 'sel', l: 'Kształt przekroju', o: () => Object.entries(E.SHAPES), wide: true, re: true },
     ...DIMF(),
+    { t: 'html', h: () => partsHTML() },
     { t: 'hint', h: s => POLY(s) && R && R.g && R.g.isPoly ? `A<sub>c</sub> = ${fmt(R.g.Ac / 1e6, 4)} m², środek ciężkości: x<sub>c</sub> = ${fmt(R.g.xc, 0)}, y<sub>c</sub> = ${fmt(R.g.yc, 0)} mm od lewej i górnej krawędzi; i<sub>y</sub> = ${fmt(R.g.iy, 1)}, i<sub>z</sub> = ${fmt(R.g.iz, 1)}${Math.abs(R.g.Iyz) > 1 ? `, i<sub>min</sub> = ${fmt(R.g.iMin, 1)} mm (oś główna)` : ''} mm` : '' },
     { k: 'geom.L', t: 'num', l: 'Wysokość słupa w świetle l', u: 'm', list: [2.5, 2.8, 3.0, 3.3, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0, 8.0, 10.0], min: 0.5, max: 60 },
     { t: 'sub', l: 'Warunki podparcia i długość wyboczeniowa' },
@@ -4422,7 +4480,8 @@ function fieldsHTML(items, gid) {
       html += `<div class="row ${f.wide ? 'wide' : ''}"><label for="${id}">${lab(f)}</label><select id="${id}" data-k="${f.k}" data-num="${f.num ? 1 : ''}" data-re="${f.re ? 1 : ''}">${opts.map(([val, l]) => `<option value="${esc(val)}" ${String(val) === String(v === undefined ? '' : v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>${f.wide ? '' : '<span></span>'}</div>`;
     } else if (f.t === 'num') {
       const v = getP(S, f.k);
-      html += `<div class="row"><label for="${id}">${lab(f)}</label><div class="combo"><input id="${id}" data-k="${f.k}" value="${esc(showNum(v))}" ${f.ph ? `placeholder="${esc(f.ph)}"` : ''} ${f.auto ? 'data-auto="1"' : ''} data-min="${f.min !== undefined ? f.min : ''}" data-max="${f.max !== undefined ? f.max : ''}" data-re="${f.re ? 1 : ''}" autocomplete="off" spellcheck="false"><button tabindex="-1" data-list="${esc(JSON.stringify(f.list || []))}" aria-label="lista">▾</button></div><span class="unit">${esc(f.u || '')}</span></div>`;
+      const isDim = /^geom\.(b|h|D|pipe\.|tee\.|ang\.)/.test(f.k);
+      html += `<div class="row"><label for="${id}">${lab(f)}</label><div class="combo"><input id="${id}" data-k="${f.k}" value="${esc(showNum(v))}" ${f.ph ? `placeholder="${esc(f.ph)}"` : ''} ${f.auto ? 'data-auto="1"' : ''} data-min="${f.min !== undefined ? f.min : ''}" data-max="${f.max !== undefined ? f.max : ''}" data-re="${f.re ? 1 : ''}" autocomplete="off" spellcheck="false"><button tabindex="-1" data-list="${esc(JSON.stringify(f.list || []))}" aria-label="lista">▾</button></div><span class="unit">${esc(f.u || '')}${isDim ? dimBadgeF(f.k) : ''}</span></div>`;
     } else if (f.t === 'chk') {
       html += `<label class="chk"><input type="checkbox" data-k="${f.k}" data-re="${f.re ? 1 : ''}" ${getP(S, f.k) ? 'checked' : ''}><span>${lab(f)}</span></label>`;
     }
@@ -4444,6 +4503,55 @@ function refreshHints() {
     const el = $(`[data-hint="${gid}_${i}"]`); if (!el) return;
     const open = !!el.querySelector('details.exh[open]'), h = hintHTML(f); el.innerHTML = h; el.style.display = h ? '' : 'none'; if (open) { const d = el.querySelector('details.exh'); if (d) d.open = true; }
   }));
+}
+// schematy statyczne słupów (jak „Schemat statyczny” w BelkaŻB): typowe przypadki podparcia w obu płaszczyznach
+const PRESETS = [
+  ['pp', 'Przegub – przegub (słup usztywniony, np. wewnętrzny budynku)', { y: { sch: 'pp', mode: 'auto' } }],
+  ['cant', 'Wspornik – utwierdzony u dołu, wolny u góry (hala, wiata, maszt)', { y: { sch: 'cant', mode: 'auto' } }],
+  ['fp', 'Utwierdzony u dołu, przegub u góry (usztywniony)', { y: { sch: 'fp', mode: 'auto' } }],
+  ['ff', 'Utwierdzony obustronnie (usztywniony)', { y: { sch: 'ff', mode: 'auto' } }],
+  ['ffs', 'Utwierdzony obustronnie, głowica przesuwna (rama nieusztywniona)', { y: { sch: 'ffs', mode: 'auto' } }],
+  ['kb', 'Słup ramy usztywnionej – podatności węzłów k₁, k₂ (wzór 5.15)', { y: { sch: 'pp', mode: 'k', k1: 0.2, k2: 0.2 } }],
+  ['ku', 'Słup ramy nieusztywnionej – podatności węzłów k₁, k₂ (wzór 5.16)', { y: { sch: 'ffs', mode: 'k', k1: 0.2, k2: 0.2 } }],
+  ['hall', 'Słup hali: wspornik w płaszczyźnie h, przegub–przegub w płaszczyźnie b (stężenia)', { y: { sch: 'cant', mode: 'auto' }, z: { sch: 'pp', mode: 'auto' } }],
+  ['hall2', 'Słup hali ze stężeniem w połowie wysokości w płaszczyźnie b (l₀,b = 0,5·l)', { y: { sch: 'cant', mode: 'auto' }, z: { sch: 'pp', mode: 'beta', beta: 0.5 } }],
+  ['top', 'Słup ostatniej kondygnacji: utwierdzony u dołu, przegub u góry, pręty kotwione w stropie', { y: { sch: 'fp', mode: 'auto' }, det: { top: 'anch' } }],
+];
+function presetOf(st) {
+  const by = st.buck.y, bz = st.buck.same ? st.buck.y : st.buck.z;
+  for (const [k, , p] of PRESETS) {
+    const qy = p.y, qz = p.z || p.y, eq = (b, q) => b.sch === q.sch && b.mode === q.mode && (q.mode !== 'beta' || Math.abs(b.beta - q.beta) < 1e-9);
+    if (eq(by, qy) && eq(bz, qz) && (!p.det || st.det.top === p.det.top) && (p.z ? !st.buck.same : true)) return k;
+  }
+  return 'manual';
+}
+const SCH_ICON = (k) => {
+  const p = (PRESETS.find(q => q[0] === k) || [])[2]; if (!p) return '';
+  const one = (sch, x) => { const t = 12, b = 68; let s = `<line x1="${x}" y1="${t}" x2="${x}" y2="${b}" stroke="#39414f" stroke-width="3"/>`;
+    const hat = (y, up) => { let q = `<line x1="${x - 10}" y1="${y}" x2="${x + 10}" y2="${y}" stroke="#1b2230" stroke-width="1.5"/>`; for (let i = 0; i < 5; i++) q += `<line x1="${x - 10 + i * 5}" y1="${y}" x2="${x - 14 + i * 5}" y2="${y + (up ? -4 : 4)}" stroke="#5d6778" stroke-width="0.8"/>`; return q; };
+    const pin = (y, up) => `<path d="M${x},${y} l-5,${up ? -8 : 8} h10 z" fill="#ffffff" stroke="#1b2230" stroke-width="1.1"/>`;
+    if (sch === 'pp') s += pin(b, false) + pin(t, true); else if (sch === 'fp') s += hat(b, false) + pin(t, true); else if (sch === 'ff') s += hat(b, false) + hat(t, true); else if (sch === 'ffs') s += hat(b, false) + hat(t - 3, true) + `<circle cx="${x - 4}" cy="${t - 1}" r="1.6" fill="none" stroke="#1b2230"/><circle cx="${x + 4}" cy="${t - 1}" r="1.6" fill="none" stroke="#1b2230"/>`; else if (sch === 'cant') s += hat(b, false);
+    return s; };
+  const y = p.y, z = p.z || p.y;
+  return `<svg width="70" height="80" viewBox="0 0 70 80" class="schic">${one(y.sch, 22)}${one(z.sch, 50)}<text x="22" y="79" font-size="8" text-anchor="middle" fill="#7a8494">h</text><text x="50" y="79" font-size="8" text-anchor="middle" fill="#7a8494">b</text></svg>`;
+};
+function presetHTML() {
+  const cur = presetOf(S);
+  return `<div class="row wide"><label for="fPreset">Schemat statyczny</label><select id="fPreset" data-preset="1">${PRESETS.map(([k, l]) => `<option value="${k}" ${cur === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}<option value="manual" ${cur === 'manual' ? 'selected' : ''}>Inny – warunki podparcia ustawione poniżej</option></select></div><div class="rowbtn"><button type="button" class="btn sm" id="presetBtn" title="Typowe schematy statyczne słupów z rysunkiem">Schematy typowe…</button></div>`;
+}
+function applyPreset(k) {
+  const p = (PRESETS.find(q => q[0] === k) || [])[2]; if (!p) return;
+  const set = (d, q) => { Object.assign(S.buck[d], { sch: q.sch, mode: q.mode }); if (q.beta !== undefined) S.buck[d].beta = q.beta; if (q.k1 !== undefined) { S.buck[d].k1 = q.k1; S.buck[d].k2 = q.k2; } };
+  set('y', p.y); if (p.z) { S.buck.same = false; set('z', p.z); } else { S.buck.same = true; S.buck.z = JSON.parse(JSON.stringify(S.buck.y)); }
+  if (p.det) Object.assign(S.det, p.det);
+  changed(true);
+}
+function presetPopup() {
+  const m = $('#modal'), cur = presetOf(S);
+  m.innerHTML = `<div class="dlg wide"><h3>Schematy statyczne słupów</h3><div class="pcards">${PRESETS.map(([k, l]) => `<button class="pcard ${cur === k ? 'on' : ''}" data-pk="${k}">${SCH_ICON(k)}<span>${esc(l)}</span></button>`).join('')}</div>
+    <p class="hint keep">Schemat określa podparcie słupa w płaszczyznach h i b: długość wyboczeniową l₀ = β·l (rys. 5.7), rozkład momentów od obciążeń poziomych i mimośrodu oraz to, czy układ jest usztywniony. Po wyborze można zmienić szczegóły (warunki podparcia, β, l₀, k₁, k₂) w Danych albo klikając podporę na schemacie.</p><div class="dbtn"><button class="btn pri" id="pcClose">Zamknij</button></div></div>`;
+  m.style.display = 'flex'; popRedraw = null; $('#pcClose', m).onclick = closeModal;
+  $$('[data-pk]', m).forEach(b => b.onclick = () => { closeModal(); applyPreset(b.dataset.pk); toast(`Schemat statyczny: ${(PRESETS.find(q => q[0] === b.dataset.pk) || [])[1]}.`, 3000); });
 }
 // klasa betonu: lista z „Auto” (minimalna dla ekspozycji, wyższa – gdy wymaga jej dobór), blokada klasy, tabela parametrów klas (jak BelkaŻB 2.10)
 const LOCK_SVG = on => `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.2 7 V4.8 a2.8 2.8 0 0 1 5.6 0 ${on ? 'V7' : 'V5.6'}" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
@@ -4473,7 +4581,24 @@ function concTablePopup() {
   m.style.display = 'flex'; popRedraw = null; $('#ctClose', m).onclick = closeModal;
   $$('tr[data-cls]', m).forEach(tr => tr.addEventListener('click', () => { S.mat.concrete = tr.dataset.cls; S.mat.autoC = false; closeModal(); changed(true); }));
 }
+// zmienny przekrój na wysokości słupa (jak „+ zmienny przekrój w tym przęśle” w BelkaŻB): odcinki od–do z innym b × h albo ⌀D
+function partsHTML() {
+  const G = S.geom, sh = G.shape; if (sh !== 'rect' && sh !== 'circ') return '';
+  const P = G.parts || [];
+  const res = d => R && R.partRes ? R.partRes.filter(q => q.P.pi === d) : [];
+  const rows = P.map((p, i) => { const rr = res(i), u = rr.length ? Math.max(...rr.map(q => q.u)) : null;
+    return `<div class="partrow"><span class="pl">odcinek ${i + 1}: z od</span><input class="txt n" data-pt="${i}.z0" value="${esc(showNum(p.z0))}" inputmode="decimal"><span>do</span><input class="txt n" data-pt="${i}.z1" value="${esc(showNum(p.z1))}" inputmode="decimal"><span>m;</span>${sh === 'rect' ? `<span>b</span><input class="txt n" data-pt="${i}.b" value="${esc(showNum(p.b))}" inputmode="decimal"><span>h</span><input class="txt n" data-pt="${i}.h" value="${esc(showNum(p.h))}" inputmode="decimal">` : `<span>⌀D</span><input class="txt n" data-pt="${i}.D" value="${esc(showNum(p.D))}" inputmode="decimal">`}<span>mm</span>${u !== null ? `<b class="pu" style="color:var(--${u > 1 ? 'fail' : 'ok'})">η = ${isFinite(u) ? fmt(u * 100, 0) : '∞'}%</b>` : ''}<button class="del" data-ptdel="${i}" title="Usuń odcinek">×</button></div>`; }).join('');
+  return `<div class="parts">${rows}<button class="lnk" id="ptAdd">+ zmienny przekrój na wysokości słupa</button>${P.length ? '<p class="hint keep">W odcinku – inny przekrój, te same pręty (rozmieszczone w przekroju odcinka). Sprawdzane: M<sub>Ed</sub> ≤ M<sub>Rd</sub>(N<sub>Ed</sub>) przekroju odcinka w jego punktach (z imperfekcją i II rzędem przekroju podstawowego), rozstaw prętów, strzemiona; smukłość – dla przekroju podstawowego (uwaga przy mniejszym odcinku). Pręty przy zmianie przekroju – odgięcie 1:6 lub osobne pręty (detal).</p>' : ''}</div>`;
+}
+function bindParts(host) {
+  const a = $('#ptAdd', host); if (a) a.onclick = () => { const G = S.geom; G.parts = G.parts || []; const L = G.L; G.parts.push({ z0: +(L * 0.75).toFixed(2), z1: L, b: Math.max(200, G.b - 50), h: Math.max(200, G.h - 50), D: Math.max(250, G.D - 50) }); changed(true); };
+  $$('[data-pt]', host).forEach(inp => inp.addEventListener('change', () => { const [i, k] = inp.dataset.pt.split('.'), v = parseNum(inp.value); if (v === null || v < 0) { inp.classList.add('bad'); return; } S.geom.parts[+i][k] = v; changed(true); }));
+  $$('[data-ptdel]', host).forEach(b => b.onclick = () => { S.geom.parts.splice(+b.dataset.ptdel, 1); changed(true); });
+}
 function bindMat(host) {
+  const ps = $('select[data-preset]', host); if (ps) ps.addEventListener('change', () => { if (ps.value !== 'manual') applyPreset(ps.value); });
+  const pb = $('#presetBtn', host); if (pb) pb.onclick = () => presetPopup();
+  bindParts(host);
   const cs = $('select[data-conc]', host);
   if (cs) cs.addEventListener('change', () => { if (cs.value === 'auto') { S.mat.autoC = true; S.mat.lockC = false; S.mat.cDes = ''; } else { S.mat.autoC = false; S.mat.concrete = cs.value; } changed(true); });
   const lk = $('#concLock', host);
@@ -4589,7 +4714,7 @@ function dsumHTML() {
     const bad = cs.filter(x => x.status === 'fail').length;
     h += `<button class="dsb ${st}" data-dg="${gi}" title="${esc(w.name.replace(/_\{?([^}]*)\}?/g, '$1'))}${isFinite(w.ratio) ? ' – ' + fmt(w.ratio * 100, 0) + '%' : ''} · kliknij, aby przejść do Podsumowania"><span class="ic">${st === 'fail' ? '✖' : st === 'warn' ? '!' : '✔'}</span>${a ? `<b>${a}</b> ` : ''}${l}<span class="pc">${isFinite(w.ratio) ? fmt(w.ratio * 100, 0) + '%' : '∞'}</span>${bad ? `<span class="nb">${bad}</span>` : ''}</button>`;
   });
-  if (R.res && R.res.length) { const sl = DIRS().some(d => R.res.some(q => q[d].slender)); h += `<span class="dsb ${sl ? 'warn' : 'ok'}" style="cursor:default" title="Smukłość λ względem λ_lim"><span class="ic">λ</span>${sl ? 'słup smukły – II rząd' : 'efekty II rzędu pomijalne'}</span>`; }
+  if (R.res && R.res.length) { const sl = DIRS().some(d => R.res.some(q => q[d].slender)); h += `<button class="dsb ${sl ? 'warn' : 'ok'}" data-dslen="1" title="Smukłość λ względem λ_lim – kliknij, aby przejść do Podsumowania (smukłość i efekty II rzędu)"><span class="ic">λ</span>${sl ? 'słup smukły – II rząd' : 'efekty II rzędu pomijalne'}</button>`; }
   return h + '</div>';
 }
 const DIRS = () => ['y', 'z'];
@@ -4597,6 +4722,8 @@ function renderDsum() {
   $$('#dsum, .dsumx').forEach(el => {
     el.innerHTML = dsumHTML();
     $$('[data-auto]', el).forEach(b => b.addEventListener('click', ev => { ev.stopPropagation(); doAutoReb(); }));
+    // smukłość – Podsumowanie: wiersz smukłości decydującej (λ > λ_lim) albo pierwszy wiersz grupy „smukłość i efekty II rzędu”
+    $$('[data-dslen]', el).forEach(b => b.addEventListener('click', () => { const c = R.checks; let i = c.findIndex(x => /^lam[yz]?$/.test(x.id) && x.ratio > 1); if (i < 0) i = c.findIndex(x => /smukłość/i.test(x.grp)); goSum(i); }));
     // klik w podgląd wyniku – Podsumowanie, wiersz warunku niespełnionego (albo z uwagą, albo decydującego) z wyróżnieniem
     $$('[data-dg]', el).forEach(b => b.addEventListener('click', () => {
       const pr = DSUM[+b.dataset.dg][2], c = R.checks;
@@ -4833,7 +4960,7 @@ function dimRun(key) {
 }
 function dimRepaint() {
   const on = $('.tabs button.on'); if (on && on.dataset.tab === 'data') { rendered.data = false; renderDataSide(); } else rendered.data = false;
-  $$('[data-dimst]').forEach(el => { el.outerHTML = dimBadge(); });
+  $$('[data-dimst]').forEach(el => { el.outerHTML = el.dataset.dimst === '1' ? dimBadge() : dimBadgeF(el.dataset.dimst); });
 }
 const sameSz = (sz) => { const G = S.geom; if (sz.D) return G.shape === 'circ' && sz.D === G.D; if (sz.pipe) return G.pipe.D === sz.pipe.D && G.pipe.t === sz.pipe.t; if (sz.tee) return JSON.stringify(sz.tee) === JSON.stringify({ bf: G.tee.bf, hf: G.tee.hf, bw: G.tee.bw, h: G.tee.h }); if (sz.ang) return sz.ang.b === G.ang.b && sz.ang.h === G.ang.h && sz.ang.tb === G.ang.tb && sz.ang.th === G.ang.th; return sz.b === G.b && sz.h === G.h; };
 function dimState() {
@@ -4854,6 +4981,19 @@ function dimBadge() {
   if (d.st === 'bad') return `<span class="dimst bad" data-dimst="1" data-dsug="1" role="button" tabindex="0">✖<span class="dimtip"><b>Przekrój ${esc(sh)} mm – za mały.</b> Przy tych wymiarach nie da się spełnić wszystkich warunków samym zbrojeniem. Proponowany przekrój: <b>${esc(d.b.lab)} mm</b> ze zbrojeniem ${d.b.n}⌀${d.b.d} – kliknij ✖, aby przyjąć.</span></span>`;
   return `<span class="dimst big" data-dimst="1" data-dsug="1" role="button" tabindex="0">?<span class="dimtip"><b>Przekrój ${esc(sh)} mm spełnia wszystkie warunki, ale jest większy niż potrzeba.</b> Wystarczy <b>${esc(d.b.lab)} mm</b> (zbrojenie ${d.b.n}⌀${d.b.d}) – kliknij ?, aby przyjąć; możesz też zostawić obecne wymiary.</span></span>`;
 }
+// znacznik przy polu wymiaru (Dane, jak przy b i h w BelkaŻB): ✔ – wymiar wystarczający, ✖ – do zwiększenia, ? – można zmniejszyć;
+// kliknięcie ✖ / ? przyjmuje proponowany przekrój (sprawdzony doborem zbrojenia i kompletem warunków)
+function dimBadgeF(k) {
+  const d = dimState(), nm = { 'geom.b': 'Wymiar b', 'geom.h': 'Wymiar h', 'geom.D': 'Średnica D' }[k] || 'Wymiar', cur = getP(S, k);
+  if (!d) return `<span class="dimst" data-dimst="${k}"></span>`;
+  if (d.st === 'pend') return `<span class="dimst" data-dimst="${k}"><i class="dpend" title="Sprawdzanie wymiarów przekroju…"></i></span>`;
+  const pv = d.b ? getP(d.b.sz, k.replace(/^geom\./, '')) : null;
+  if (d.st === 'none') return `<span class="dimst bad" data-dimst="${k}" title="Nie znaleziono przekroju spełniającego wszystkie warunki – zmień schemat, obciążenia lub materiały.">✖</span>`;
+  if (d.st === 'bad' && pv !== null && pv !== undefined && pv > cur) return `<span class="dimst bad" data-dimst="${k}" data-dsug="1" role="button" tabindex="0">✖<span class="dimtip"><b>${nm} ${cur} mm – do zwiększenia → ${pv} mm.</b> Przy obecnych wymiarach nie da się spełnić wszystkich warunków samym zbrojeniem. Proponowany przekrój: <b>${esc(d.b.lab)} mm</b> (${d.b.n}⌀${d.b.d}) – kliknij ✖, aby przyjąć.</span></span>`;
+  if (d.st === 'big' && pv !== null && pv !== undefined && pv < cur) return `<span class="dimst big" data-dimst="${k}" data-dsug="1" role="button" tabindex="0">?<span class="dimtip"><b>${nm} ${cur} mm – większy niż potrzeba: wystarczy ${pv} mm.</b> Przekrój ${esc(d.b.lab)} mm (${d.b.n}⌀${d.b.d}) spełnia wszystkie warunki – kliknij ?, aby przyjąć; możesz też zostawić obecny wymiar.</span></span>`;
+  return `<span class="dimst ok" data-dimst="${k}" title="${esc(`${nm} ${cur} mm – ${d.st === 'bad' ? 'bez zmian (do poprawy inny wymiar)' : 'wystarczający'}.`)}">✔</span>`;
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#inputs [data-dsug]'); if (b) { e.preventDefault(); applyDimSug(); } });
 function dimSugHTML() {
   const d = dimState(); if (!d || (d.st !== 'bad' && d.st !== 'big')) return '';
   return `<p class="hint keep" style="margin-top:6px">${d.st === 'bad' ? '✖ Przekrój za mały' : '? Przekrój większy niż potrzeba'} – ${d.st === 'bad' ? 'proponowany' : 'wystarczy'} <b>${esc(d.b.lab)} mm</b> (${d.b.n}⌀${d.b.d}). <button class="lnk" data-dsug="1">przyjmij</button></p>`;

@@ -240,6 +240,8 @@ function normalize(S0) {
   if (S.mat.autoC) { let c = minClsOf(S); if (S.mat.cDes && classIdx(S.mat.cDes) > classIdx(c)) c = S.mat.cDes; S.mat.concrete = c; }
   // kruszywo „Auto”: największa frakcja dopuszczona prześwitem prętów (8.2(2)); rozmieszczenie prętów – dla d_g = 8 mm
   S.mat.dgAuto = S.mat.dgAuto === true; if (S.mat.dgAuto) S.mat.dg = 8;
+  // zmienny przekrój na wysokości (odcinki z0–z1 [m] o innym przekroju: b × h albo ⌀D)
+  { const G = S.geom; G.parts = Array.isArray(G.parts) ? G.parts.map(p => ({ z0: Math.max(0, num(p.z0, 0)), z1: num(p.z1, 0), b: num(p.b, G.b), h: num(p.h, G.h), D: num(p.D, G.D) })).filter(p => p.z1 > p.z0 + 1e-6).slice(0, 6) : []; }
   ['life', 'dcdev', 'dcg', 'dcst', 'dcadd', 'cnomVal'].forEach(k => S.env[k] = num(S.env[k], D.env[k]));
   { const cf0 = S.env.cf && typeof S.env.cf === 'object' ? S.env.cf : {}; S.env.cf = {}; ['top', 'bot', 'lft', 'rgt'].forEach(k => { const v = cf0[k]; S.env.cf[k] = v === undefined || v === null || v === '' || v === 'auto' || !isFinite(+v) ? 'auto' : Math.max(0, +v); }); }
   const Lo = S.loads;
@@ -1122,6 +1124,13 @@ function m2Shape(sch, braced, xi) {
 
 /* ------------------------------------- efekty II rzędu w jednym kierunku */
 // D – dane kierunku: {B, ei, e0, U (krzywe), g, m, phiInf, dEff, Is, Ic, omega, As, Ac}
+// moment obliczeniowy M_Ed(x) kombinacji w kierunku: I rząd + imperfekcja + II rząd (jak wykresy) – N·mm, punkty XI
+function momentsOf(R, oc, dir) {
+  const r = oc[dir], fr = oc.fr, B = R.buck[dir];
+  const M0 = Array.from(fr[dir].M), n = M0.length - 1, M2 = isFinite(r.M2) ? r.M2 : 0;
+  const sgn = v => (r.braced ? (r.tr ? r.sg : r.sEnd) : (v !== 0 ? Math.sign(v) : r.sg)) || 1;
+  return M0.map((v, i) => v + sgn(v) * Math.max(0, fr.Nat(i / n)) * r.ei + sgn(v) * M2 * m2Shape(B.sch, !!r.braced, i / n));
+}
 function evalDir(D, S, fr, frq, opts) {
   const m = D.m, g = D.g, B = D.B, L = g.L, dir = D.dir;
   const M0 = fr[dir].M, V0 = fr[dir].V;
@@ -1524,6 +1533,32 @@ function calc(S0, opts) {
   });
   R.NEdMax = res.length ? Math.max(...res.map(o => o.fr.Nbot)) : 0;
   R.NEdMin = res.length ? Math.min(...res.map(o => o.fr.Ntop)) : 0;
+  // zmienny przekrój na wysokości słupa (odcinki o innym przekroju): te same pręty w geometrii odcinka, nośność M_Rd(N_Ed) odcinka
+  // przy M_Ed(z) (z imperfekcją i efektami II rzędu przekroju podstawowego) i N_Ed(z) w punktach odcinka
+  R.parts = []; R.partRes = [];
+  if ((S.geom.parts || []).length && (S.geom.shape === 'rect' || S.geom.shape === 'circ')) {
+    S.geom.parts.forEach((p, pi) => {
+      const z0 = clamp(p.z0, 0, S.geom.L) * 1000, z1 = clamp(p.z1, 0, S.geom.L) * 1000; if (z1 - z0 < 1) return;
+      const Sp = JSON.parse(JSON.stringify(S)); Sp.geom.parts = []; if (S.geom.shape === 'rect') { Sp.geom.b = p.b; Sp.geom.h = p.h; } else Sp.geom.D = p.D;
+      const Rp = { errors: [], warns: [], infos: [] }; let gp; try { gp = geomCalc(Sp, Rp); } catch (e) { gp = null; }
+      if (!gp || Rp.errors.length) { R.warns.push(`Odcinek ${pi + 1} zmiennego przekroju: ${Rp.errors.join(' ') || 'błędne wymiary'}`); return; }
+      const lp = layoutBars(Sp, gp, cov, m), U = {};
+      DIRS.forEach(d => { U[d] = makeDirULS(gp.parts[d], gp.dir[d].depth, lay.n ? barsDir(lp, gp, d) : [], m); });
+      R.parts.push({ pi, z0, z1, g: gp, lay: lp, U, S: Sp, lab: S.geom.shape === 'rect' ? `${p.b}×${p.h}` : `⌀${p.D}` });
+    });
+    R.parts.forEach(P => DIRS.forEach(d => {
+      let best = null;
+      res.forEach(o => {
+        const tot = momentsOf(R, o, d), n = tot.length - 1, zs = [P.z0, (P.z0 + P.z1) / 2, P.z1].concat(XI.map(x => x * g.L).filter(z => z > P.z0 && z < P.z1));
+        zs.forEach(z => {
+          const xi = clamp(z / g.L, 0, 1), i = Math.round(xi * n), N = o.fr.Nat(xi), e0 = Math.max(P.g.dir[d].depth / 30, 20), Mv = tot[i];
+          const M = Math.max(Math.abs(Mv), S.sec2.e0 ? Math.max(0, N) * e0 : 0), MRd = P.U[d].MRd(N, Mv >= 0 ? 1 : -1), u = MRd === null ? Infinity : MRd > 0 ? M / MRd : (M > 0 ? Infinity : 0);
+          if (!best || u > best.u) best = { u, z, M, MRd: MRd === null ? 0 : MRd, N, ci: o.ci, c: o.c };
+        });
+      });
+      if (best) R.partRes.push(Object.assign({ P, d }, best));
+    }));
+  }
   // zginanie ukośne – metoda włókien dla kombinacji decydujących
   if (lay.n && res.length && !opts.fast) {
     const cand = res.slice().sort((a, b) => (b.biax.u539 || b.u) - (a.biax.u539 || a.u)).slice(0, 4);
@@ -1534,7 +1569,8 @@ function calc(S0, opts) {
   // strzemiona, zakotwienia
   const tension = res.some(o => hasTension(R, o));
   R.anch = anchCalc(S, m, lay.n ? lay : Object.assign({}, lay, { dmax: 16 }), cov, tension);
-  R.ties = tiesCalc(S, g, lay.n ? lay : Object.assign({}, lay, { dmin: 12, dmax: 12, dt: dt0 }), R.anch, R.sh);
+  const gT = R.parts && R.parts.length ? Object.assign({}, g, { dmin: Math.min(g.dmin, ...R.parts.map(P => P.g.dmin)) }) : g;   // rozstaw strzemion – także w odcinkach o mniejszym przekroju
+  R.ties = tiesCalc(S, gT, lay.n ? lay : Object.assign({}, lay, { dmin: 12, dmax: 12, dt: dt0 }), R.anch, R.sh);
   // SGU
   R.sls = lay.n && S.sls.check !== false ? slsCalc(R, S) : null;
   // odporność ogniowa
@@ -1733,7 +1769,7 @@ function slsCalc(R, S) {
 }
 
 /* --------------------------------------------------------------- sprawdzenia */
-const ETA_IDS = new Set(['My', 'Mz', 'biax', 'biaxF', 'Nmax', 'stab', 'Vy', 'Vz', 'Vmaxy', 'Vmaxz', 'sck', 'ssk', 'wk', 'scqp', 'gen']);
+const ETA_IDS = new Set(['My', 'Mz', 'biax', 'biaxF', 'Nmax', 'stab', 'Vy', 'Vz', 'Vmaxy', 'Vmaxz', 'sck', 'ssk', 'wk', 'scqp', 'gen', 'Mpart']);
 function checksCalc(R, S) {
   const C = R.checks, g = R.g, m = R.m, lay = R.lay, cov = R.cov;
   const add = (grp, id, name, ref, Ed, Rd, unit, opt) => {
@@ -1758,6 +1794,17 @@ function checksCalc(R, S) {
   }
   const res = R.res;
   if (!res.length) return;
+  // --- SGN: odcinki zmiennego przekroju (te same pręty w geometrii odcinka)
+  (R.partRes || []).forEach(q => {
+    const P = q.P, pl = q.d === 'y' ? 'h' : 'b', zt = `${(P.z0 / 1000).toFixed(2)}–${(P.z1 / 1000).toFixed(2)} m`;
+    add(gN, 'Mpart', `Odcinek ${P.pi + 1} (z = ${zt}, ${P.lab}) – zginanie z siłą podłużną w płaszczyźnie ${pl}: M_Ed ≤ M_Rd(N_Ed)`, '6.1', q.M / 1e6, q.MRd / 1e6, 'kNm', { ratio: q.u, note: `z = ${(q.z / 1000).toFixed(2)} m; N_Ed = ${(q.N / 1e3).toFixed(1)} kN; ${q.c.name}; II rząd – dla przekroju podstawowego`, at: { part: P.pi, dir: q.d }, sec: 'uls' + q.d });
+  });
+  (R.parts || []).forEach(P => {
+    if (P.lay.issues.length) add(gD, 'fitP', `Odcinek ${P.pi + 1} (${P.lab}) – rozmieszczenie prętów`, '8.2', 1, 0, '', { ratio: Infinity, status: 'fail', note: P.lay.issues.join('; '), fmt: 'text', at: { part: P.pi }, sec: 'det' });
+    if (lay.n && P.lay.minClear < P.lay.smin - 0.5) add(gD, 'spP', `Odcinek ${P.pi + 1} (${P.lab}) – odstęp prętów w świetle ≥ max(⌀; d_g + 5 mm; 20 mm)`, '8.2(2)', P.lay.smin, P.lay.minClear, 'mm', { rel: '≥', at: { part: P.pi }, sec: 'det' });
+    DIRS.forEach(d => { if (P.g.dir[d].i < g.dir[d].i - 1) add(gS, 'lamPart', `Odcinek ${P.pi + 1} (${P.lab}) ma mniejszy promień bezwładności w płaszczyźnie ${d === 'y' ? 'h' : 'b'} niż przekrój podstawowy`, '5.8.3.2', g.dir[d].i, P.g.dir[d].i, 'mm', { rel: '≥', soft: true, status: 'warn', ratio: g.dir[d].i / P.g.dir[d].i, note: 'smukłość i efekty II rzędu liczone dla przekroju podstawowego – przyjmij mniejszy przekrój jako podstawowy (bezpiecznie) albo skróć odcinek', at: { part: P.pi }, sec: 'slen' }); });
+    if (R.ties && P.g.dmin < g.dmin && R.ties.s > Math.min(20 * lay.dmin, P.g.dmin, 400) + 0.5) add(gD, 'stP', `Odcinek ${P.pi + 1} (${P.lab}) – rozstaw strzemion s ≤ min(20⌀; b; 400 mm)`, '9.5.3(3)', R.ties.s, Math.min(20 * lay.dmin, P.g.dmin, 400), 'mm', { at: { part: P.pi }, sec: 'ties' });
+  });
   // --- SGN: zginanie z siłą podłużną (jednokierunkowo)
   const govOf = d => res.reduce((a, o) => (o[d].u > a[d].u ? o : a));
   if (lay.n) {
